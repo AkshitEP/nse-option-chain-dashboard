@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NSE Option Chain Dashboard — NIFTY Live</title>
+  <meta name="description" content="Live NIFTY Option Chain Dashboard with COI, PCR and Imbalance calculations">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+  <!-- ── Header ──────────────────────────────────────────────────── -->
+  <header class="header">
+    <div class="header-left">
+      <div class="logo">
+        <div class="logo-icon">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+            <rect width="28" height="28" rx="8" fill="url(#grad1)" />
+            <path d="M7 14L12 9L17 14L12 19Z" fill="white" opacity="0.9" />
+            <path d="M11 14L16 9L21 14L16 19Z" fill="white" opacity="0.6" />
+            <defs>
+              <linearGradient id="grad1" x1="0" y1="0" x2="28" y2="28">
+                <stop stop-color="#6366f1" />
+                <stop offset="1" stop-color="#8b5cf6" />
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <div>
+          <h1>NIFTY Option Chain</h1>
+          <span class="subtitle">Live Dashboard</span>
+        </div>
+      </div>
+    </div>
+    <div class="header-center">
+      <div class="spot-price-container">
+        <span class="spot-label">NIFTY SPOT</span>
+        <span class="spot-price" id="spotPrice">--</span>
+        <span class="spot-change" id="spotChange">--</span>
+      </div>
+      <div class="atm-badge">
+        <span class="atm-label">ATM Strike</span>
+        <span class="atm-value" id="atmStrike">--</span>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="status-group">
+        <div class="refresh-timer">
+          <div class="timer-ring">
+            <svg width="36" height="36" viewBox="0 0 36 36">
+              <circle cx="18" cy="18" r="15" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="3" />
+              <circle cx="18" cy="18" r="15" fill="none" stroke="url(#timerGrad)" stroke-width="3"
+                stroke-dasharray="94.25" stroke-dashoffset="0" stroke-linecap="round" id="timerCircle"
+                transform="rotate(-90 18 18)" />
+              <defs>
+                <linearGradient id="timerGrad">
+                  <stop stop-color="#34d399" />
+                  <stop offset="1" stop-color="#6ee7b7" />
+                </linearGradient>
+              </defs>
+            </svg>
+            <span class="timer-text" id="timerText">60</span>
+          </div>
+          <div class="timer-info">
+            <span class="timer-label">Next Refresh</span>
+            <span class="update-time" id="lastUpdate">--</span>
+          </div>
+        </div>
+        <div class="connection-status" id="connectionStatus">
+          <span class="status-dot"></span>
+          <span>Connecting</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── Main Content ────────────────────────────────────────────── -->
+  <main class="main">
+    <!-- Summary Cards -->
+    <section class="summary-cards" id="summaryCards">
+      <div class="card card-pcr">
+        <div class="card-icon">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="2" />
+            <path d="M10 6V14M6 10H14" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+          </svg>
+        </div>
+        <div class="card-content">
+          <span class="card-label">Put-Call Ratio (PCR)</span>
+          <span class="card-value" id="pcrValue">--</span>
+        </div>
+        <div class="card-trend" id="pcrTrend"></div>
+      </div>
+      <div class="card card-imbalance">
+        <div class="card-icon">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M3 17L10 3L17 17H3Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
+          </svg>
+        </div>
+        <div class="card-content">
+          <span class="card-label">Imbalance</span>
+          <span class="card-value" id="imbalanceValue">--</span>
+        </div>
+        <div class="card-signal" id="imbalanceSignal"></div>
+      </div>
+      <div class="card card-call">
+        <div class="card-icon">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M4 16L10 4L16 16" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round" />
+          </svg>
+        </div>
+        <div class="card-content">
+          <span class="card-label">Call COI</span>
+          <span class="card-value" id="callCoiValue">--</span>
+          <span class="card-sub" id="callCoiPct">--</span>
+        </div>
+      </div>
+      <div class="card card-put">
+        <div class="card-icon">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M4 4L10 16L16 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round" />
+          </svg>
+        </div>
+        <div class="card-content">
+          <span class="card-label">Put COI</span>
+          <span class="card-value" id="putCoiValue">--</span>
+          <span class="card-sub" id="putCoiPct">--</span>
+        </div>
+      </div>
+      <div class="card card-total">
+        <div class="card-icon">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <rect x="3" y="3" width="14" height="14" rx="2" stroke="currentColor" stroke-width="2" />
+            <path d="M7 10H13M10 7V13" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+          </svg>
+        </div>
+        <div class="card-content">
+          <span class="card-label">Total COI</span>
+          <span class="card-value" id="totalCoiValue">--</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Input Controls -->
+    <section class="controls-bar">
+      <div class="control-group">
+        <label for="strikeInput">Strike Price</label>
+        <input type="number" id="strikeInput" placeholder="e.g. 23000" step="50" class="control-input">
+        <span class="control-hint">Leave blank for ATM</span>
+      </div>
+      <div class="control-group">
+        <label for="nInput">Strikes Above & Below (N)</label>
+        <input type="number" id="nInput" value="4" min="1" max="20" step="1" class="control-input control-input-sm">
+        <span class="control-hint">Total rows = 2N + 1</span>
+      </div>
+      <button class="control-btn" id="applyBtn" onclick="applySettings()">Apply</button>
+    </section>
+
+    <!-- Option Chain Table -->
+    <section class="table-container">
+      <div class="table-header-bar">
+        <h2 id="tableTitle">Option Chain</h2>
+        <div class="expiry-info" id="expiryInfo">Expiry: --</div>
+      </div>
+      <div class="table-wrapper">
+        <table class="oc-table" id="ocTable">
+          <thead>
+            <tr>
+              <th class="col-sno">SNO</th>
+              <th class="col-call-header" colspan="2">CALLS</th>
+              <th class="col-strike">STRIKE</th>
+              <th class="col-put-header" colspan="2">PUTS</th>
+              <th class="col-imb-header" colspan="2">IMBALANCE</th>
+            </tr>
+            <tr class="sub-header">
+              <th></th>
+              <th class="col-ltp has-tooltip">
+                LTP
+                <span class="tooltip">Last Traded Price — the most recent price at which this option contract was traded
+                  on NSE.</span>
+              </th>
+              <th class="col-coi has-tooltip">
+                COI
+                <span class="tooltip">Change in Open Interest — the difference between today's OI and previous day's
+                  OI.<br><br><strong>Formula:</strong><br>COI = Current OI − Previous Day OI<br><br>Positive COI → new
+                  positions being built<br>Negative COI → positions being unwound</span>
+              </th>
+              <th></th>
+              <th class="col-ltp has-tooltip">
+                LTP
+                <span class="tooltip">Last Traded Price — the most recent price at which this option contract was traded
+                  on NSE.</span>
+              </th>
+              <th class="col-coi has-tooltip">
+                COI
+                <span class="tooltip">Change in Open Interest — the difference between today's OI and previous day's
+                  OI.<br><br><strong>Formula:</strong><br>COI = Current OI − Previous Day OI<br><br>Positive COI → new
+                  positions being built<br>Negative COI → positions being unwound</span>
+              </th>
+              <th class="col-imb has-tooltip">
+                vs Call
+                <span class="tooltip">Imbalance relative to Call side.<br><br><strong>Formula:</strong><br>vs Call =
+                  (Call COI − Put COI) / |Call COI| × 100<br><br>Positive → Call writing dominates (bearish)<br>Negative
+                  → Put COI exceeds Call COI (bullish)</span>
+              </th>
+              <th class="col-imb has-tooltip">
+                vs Put
+                <span class="tooltip">Imbalance relative to Put side.<br><br><strong>Formula:</strong><br>vs Put = (Call
+                  COI − Put COI) / |Put COI| × 100<br><br>Positive → Call writing dominates (bearish)<br>Negative → Put
+                  COI exceeds Call COI (bullish)</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody id="ocTableBody">
+            <tr class="loading-row">
+              <td colspan="8">
+                <div class="loader">
+                  <div class="loader-spinner"></div>
+                  <span>Fetching live data from NSE...</span>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+          <tfoot id="ocTableFoot">
+            <tr class="total-row">
+              <td></td>
+              <td></td>
+              <td class="total-coi" id="footCallCoi">--</td>
+              <td></td>
+              <td></td>
+              <td class="total-coi" id="footPutCoi">--</td>
+              <td colspan="2"></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </section>
+
+    <!-- Error Banner -->
+    <div class="error-banner" id="errorBanner" style="display:none;">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+        <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="2" />
+        <path d="M10 6V11M10 13.5V14" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+      </svg>
+      <span id="errorMessage">Unable to fetch data</span>
+      <button onclick="fetchData()" class="retry-btn">Retry</button>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <span>NSE Option Chain Dashboard • Data from nseindia.com • For educational use only</span>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+
+</html>
