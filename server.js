@@ -41,6 +41,7 @@ async function launchBrowser() {
   console.log('[NSE] Launching Chromium (stealth)...');
   browser = await puppeteer.launch({
     headless: 'new',
+    ...(process.env.PUPPETEER_EXECUTABLE_PATH ? { executablePath: process.env.PUPPETEER_EXECUTABLE_PATH } : {}),
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage',
       '--disable-gpu', '--window-size=1366,768'],
     defaultViewport: { width: 1366, height: 768 },
