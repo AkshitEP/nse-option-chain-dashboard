@@ -75,7 +75,7 @@ function getClosestStrike(spotPrice, strikePrices) {
 async function fetchData() {
     try {
         setConnectionStatus('connecting');
-        const res = await fetch(API_URL);
+        const res  = await fetch(API_URL);
         const json = await res.json();
 
         if (!json.success) {
@@ -85,12 +85,19 @@ async function fetchData() {
         const data = json.data;
         processData(data);
 
-        if (json.sample) {
+        if (json.needsAuth && json.loginUrl) {
+            // Not authenticated with Fyers — show login button
             setConnectionStatus('sample');
-            showError(json.error || 'Showing sample data — NSE API unreachable. Data will auto-refresh when live data becomes available.');
+            showError(
+                `Live data requires Fyers login. <a href="${json.loginUrl}" style="color:#7c6af7;font-weight:600;text-decoration:underline;">Click here to Login with Fyers →</a>`,
+                true /* isHTML */
+            );
+        } else if (json.sample) {
+            setConnectionStatus('sample');
+            showError(json.error || 'Showing sample data — will auto-refresh.');
         } else if (json.stale) {
             setConnectionStatus('connected');
-            showError('Using cached data — NSE fetch temporarily unavailable');
+            showError('Using cached data — live refresh temporarily unavailable.');
         } else {
             setConnectionStatus('connected');
             hideError();
@@ -99,7 +106,7 @@ async function fetchData() {
     } catch (err) {
         console.error('Fetch error:', err);
         setConnectionStatus('error');
-        showError(err.message || 'Failed to fetch data from NSE');
+        showError(err.message || 'Failed to fetch data');
     }
 
     resetTimer();
@@ -325,9 +332,13 @@ function setConnectionStatus(status) {
 }
 
 // ── Error Handling ───────────────────────────────────────────────────
-function showError(message) {
+function showError(message, isHTML = false) {
     els.errorBanner.style.display = 'flex';
-    els.errorMessage.textContent = message;
+    if (isHTML) {
+        els.errorMessage.innerHTML = message;
+    } else {
+        els.errorMessage.textContent = message;
+    }
 }
 
 function hideError() {
