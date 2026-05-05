@@ -1,310 +1,191 @@
 const express = require('express');
 const cors    = require('cors');
 const path    = require('path');
-const axios   = require('axios');
-const crypto  = require('crypto');
+const puppeteer = require('puppeteer-extra');
+const Stealth   = require('puppeteer-extra-plugin-stealth');
+puppeteer.use(Stealth());
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
-app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// ══════════════════════════════════════════════════════════════════════
-// Fyers API Config
-// ══════════════════════════════════════════════════════════════════════
-const FYERS_APP_ID     = process.env.FYERS_APP_ID     || '4U7HO4T9UI-100';
-const FYERS_APP_SECRET = process.env.FYERS_APP_SECRET || '6EZC6R9K6V';
-const REDIRECT_URI     = process.env.REDIRECT_URI     || 'https://nse-option-chain-dashboard-936v.onrender.com/';
-
-const FYERS_AUTH_BASE  = 'https://api.fyers.in/api/v3/generate-authcode';
-const FYERS_TOKEN_URL  = 'https://api.fyers.in/api/v3/validate-authcode';
-const FYERS_OC_URL     = 'https://api.fyers.in/data/v3/options-chain';
-
+const NSE_OC_PAGE       = 'https://www.nseindia.com/option-chain';
+const NSE_CONTRACT_INFO = 'https://www.nseindia.com/api/option-chain-contract-info?symbol=NIFTY';
+const NSE_API_V3        = 'https://www.nseindia.com/api/option-chain-v3?type=Indices&symbol=NIFTY';
 const POLL_MS = 45_000;
-
-// ══════════════════════════════════════════════════════════════════════
-// State
-// ══════════════════════════════════════════════════════════════════════
-let accessToken = null;
-let tokenExpiry = 0;
-let cachedData  = null;
-let cacheTime   = 0;
-let fetchCount  = 0;
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-// ══════════════════════════════════════════════════════════════════════
-// Auth helpers
-// ══════════════════════════════════════════════════════════════════════
-function getAppIdHash() {
-  return crypto.createHash('sha256')
-    .update(`${FYERS_APP_ID}:${FYERS_APP_SECRET}`)
-    .digest('hex');
-}
+let browser      = null;
+let warmPage     = null;
+let browserReady = false;
+let cachedData   = null;
+let cacheTime    = 0;
+let fetchCount   = 0;
+let errorStreak  = 0;
 
-function getLoginUrl() {
-  const params = new URLSearchParams({
-    client_id:     FYERS_APP_ID,
-    redirect_uri:  REDIRECT_URI,
-    response_type: 'code',
-    state:         'nse_dashboard',
+async function launchBrowser() {
+  if (browser) { try { await browser.close(); } catch (_) {} }
+  browser = null; warmPage = null; browserReady = false;
+
+  console.log('[NSE] Launching Chromium (stealth)...');
+  browser = await puppeteer.launch({
+    headless: 'new',
+    ...(process.env.PUPPETEER_EXECUTABLE_PATH ? { executablePath: process.env.PUPPETEER_EXECUTABLE_PATH } : {}),
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage',
+           '--disable-gpu', '--window-size=1366,768'],
+    defaultViewport: { width: 1366, height: 768 },
   });
-  return `${FYERS_AUTH_BASE}?${params}`;
 }
 
-async function exchangeCodeForToken(authCode) {
-  const res = await axios.post(FYERS_TOKEN_URL, {
-    grant_type: 'authorization_code',
-    appIdHash:  getAppIdHash(),
-    code:       authCode,
-  }, { timeout: 10_000 });
-
-  if (res.data.s !== 'ok' || !res.data.access_token) {
-    throw new Error(`Token exchange failed: ${JSON.stringify(res.data)}`);
+async function warmSession() {
+  if (warmPage && !warmPage.isClosed()) { try { await warmPage.close(); } catch (_) {} }
+  warmPage = await browser.newPage();
+  await warmPage.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
+  await warmPage.setExtraHTTPHeaders({ 'Accept-Language': 'en-US,en;q=0.9' });
+  try {
+    await warmPage.goto(NSE_OC_PAGE, { waitUntil: 'networkidle2', timeout: 35_000 });
+    await sleep(5000);
+    browserReady = true;
+    return true;
+  } catch (err) {
+    console.error('[NSE] Warm session failed:', err.message);
+    browserReady = false;
+    return false;
   }
-  return res.data.access_token;
 }
 
-// ══════════════════════════════════════════════════════════════════════
-// Fyers Option Chain fetch + transform
-// ══════════════════════════════════════════════════════════════════════
-async function fetchOptionChain() {
-  if (!accessToken) throw new Error('Not authenticated');
+async function fetchV3Data() {
+  const result = await warmPage.evaluate(async (contractInfoUrl, apiV3Base) => {
+    try {
+      const r1 = await fetch(contractInfoUrl, { credentials: 'include', headers: { 'Accept': 'application/json' } });
+      const info = await r1.json();
+      let expiry = null;
+      if (info?.data?.CE?.[0]?.expiryDate)     expiry = info.data.CE[0].expiryDate;
+      else if (info?.expiryDates?.[0])          expiry = info.expiryDates[0];
+      else if (Array.isArray(info?.data) && info.data[0]?.expiryDate) expiry = info.data[0].expiryDate;
+      if (!expiry) return { error: 'No expiry from contract-info', raw: JSON.stringify(info).substring(0, 300) };
+      const apiUrl = `${apiV3Base}&expiry=${encodeURIComponent(expiry)}`;
+      const r2 = await fetch(apiUrl, { credentials: 'include', headers: { 'Accept': 'application/json' } });
+      const text = await r2.text();
+      return { status: r2.status, text, expiry };
+    } catch (e) { return { error: e.message }; }
+  }, NSE_CONTRACT_INFO, NSE_API_V3);
 
-  const res = await axios.get(FYERS_OC_URL, {
-    params:  { symbol: 'NSE:NIFTY50-INDEX', strikecount: 20 },
-    headers: { Authorization: `${FYERS_APP_ID}:${accessToken}` },
-    timeout: 12_000,
-  });
+  if (result.error) throw new Error(`fetch error: ${result.error}`);
+  if (result.status !== 200) throw new Error(`API HTTP ${result.status}`);
+  console.log(`[NSE] v3 | expiry: ${result.expiry} | len: ${result.text?.length}`);
+  const data = JSON.parse(result.text);
+  if (!data.records || !data.records.data || data.records.data.length === 0)
+    throw new Error(`Empty records (keys: ${Object.keys(data).join(', ')})`);
+  return data;
+}
 
-  if (res.data.s !== 'ok') {
-    // Token expired?
-    if (res.data.code === 429 || res.data.code === 401 || String(res.data.message).toLowerCase().includes('token')) {
-      accessToken = null;
-      throw new Error('TOKEN_EXPIRED');
+async function fetchByIntercept() {
+  let captured = null;
+  if (warmPage && !warmPage.isClosed()) { try { await warmPage.close(); } catch (_) {} }
+  warmPage = await browser.newPage();
+  await warmPage.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
+  await warmPage.setExtraHTTPHeaders({ 'Accept-Language': 'en-US,en;q=0.9' });
+
+  const handler = async (resp) => {
+    const url = resp.url();
+    if (url.includes('option-chain-v3') || url.includes('option-chain-indices')) {
+      try {
+        const json = await resp.json();
+        if (json?.records?.data?.length > 0) {
+          captured = json;
+          console.log(`[NSE] Intercepted ${json.records.data.length} records`);
+        }
+      } catch (_) {}
     }
-    throw new Error(`Fyers API error: ${JSON.stringify(res.data)}`);
-  }
-
-  return transformFyersData(res.data);
-}
-
-/**
- * Fyers v3 option chain response can look like either:
- *   { s:'ok', data: { expiryData: [ { expiry, optionsChain:[...] } ] } }
- * OR a flat list:
- *   { s:'ok', data: { options: [ { strikePrice, optionType:'CE'|'PE', ltp, oi, changeInOI } ] } }
- *
- * We handle both and convert to the same NSE-like format the frontend already understands.
- */
-function transformFyersData(raw) {
-  const d = raw.data || raw;
-  let underlyingValue = d.underlyingValue || d.ltp || d.spotPrice || 0;
-  let expiryDates     = [];
-  let rowsData        = [];
-
-  // ── Format A: expiryData array (most common in v3) ───────────────
-  if (d.expiryData && Array.isArray(d.expiryData) && d.expiryData.length) {
-    expiryDates = d.expiryData.map(e => e.expiry || e.date || e.expiryDate || String(e));
-    const nearest   = d.expiryData[0];
-    const chainArr  = nearest.optionsChain || nearest.strikeData || nearest.data || [];
-
-    rowsData = chainArr.map(item => {
-      const sp = item.strikePrice || item.strike_price || item.strike || 0;
-      const ce = item.CE || item.ce || item.call || {};
-      const pe = item.PE || item.pe || item.put || {};
-      return buildRow(sp, ce, pe, underlyingValue, expiryDates[0]);
-    });
-  }
-  // ── Format B: flat options array with optionType field ─────────────
-  else if (d.options && Array.isArray(d.options)) {
-    const strikeMap = {};
-    for (const opt of d.options) {
-      const sp = opt.strikePrice || opt.strike_price || 0;
-      if (!strikeMap[sp]) strikeMap[sp] = { CE: {}, PE: {} };
-      const type = (opt.optionType || opt.option_type || '').toUpperCase();
-      strikeMap[sp][type] = opt;
-      if (opt.expiryDate && !expiryDates.includes(opt.expiryDate)) expiryDates.push(opt.expiryDate);
-      if (opt.underlyingValue || opt.underlying_value) underlyingValue = opt.underlyingValue || opt.underlying_value;
-    }
-    rowsData = Object.entries(strikeMap)
-      .sort(([a], [b]) => Number(a) - Number(b))
-      .map(([sp, { CE, PE }]) => buildRow(Number(sp), CE, PE, underlyingValue, expiryDates[0] || ''));
-  } else {
-    throw new Error(`Unknown Fyers response shape: keys=${Object.keys(d).join(',')}`);
-  }
-
-  if (!rowsData.length) throw new Error('No option chain rows parsed');
-
-  const sortedRows = rowsData.sort((a, b) => a.strikePrice - b.strikePrice);
-
-  return {
-    records: {
-      timestamp:      new Date().toISOString(),
-      underlyingValue,
-      expiryDates,
-      data:           sortedRows,
-      strikePrices:   sortedRows.map(r => r.strikePrice),
-    },
-    filtered: { data: sortedRows },
   };
+  warmPage.on('response', handler);
+  try {
+    await warmPage.goto(NSE_OC_PAGE, { waitUntil: 'networkidle2', timeout: 35_000 });
+    await sleep(5000);
+  } catch (err) { console.error('[NSE] Intercept nav error:', err.message); }
+  finally { warmPage.off('response', handler); }
+  if (captured) browserReady = true;
+  return captured;
 }
 
-function buildRow(strikePrice, ce, pe, underlyingValue, expiry) {
-  return {
-    strikePrice,
-    expiryDates: expiry,   // matches v3 field name our frontend expects
-    CE: {
-      strikePrice,
-      expiryDate:           expiry,
-      lastPrice:            ce.ltp          ?? ce.lastPrice     ?? 0,
-      changeinOpenInterest: ce.changeInOI   ?? ce.oiChange      ?? ce.oi_change ?? ce.changeinOpenInterest ?? 0,
-      openInterest:         ce.oi           ?? ce.openInterest  ?? ce.open_interest ?? 0,
-      underlyingValue,
-    },
-    PE: {
-      strikePrice,
-      expiryDate:           expiry,
-      lastPrice:            pe.ltp          ?? pe.lastPrice     ?? 0,
-      changeinOpenInterest: pe.changeInOI   ?? pe.oiChange      ?? pe.oi_change ?? pe.changeinOpenInterest ?? 0,
-      openInterest:         pe.oi           ?? pe.openInterest  ?? pe.open_interest ?? 0,
-      underlyingValue,
-    },
-  };
+async function initAndFetch() {
+  await launchBrowser();
+  const intercepted = await fetchByIntercept();
+  if (intercepted) return intercepted;
+  console.log('[NSE] Intercept got nothing. Trying v3 two-step...');
+  await sleep(1000);
+  try { return await fetchV3Data(); } catch (err) { console.error('[NSE] v3 attempt 1:', err.message); }
+  await sleep(3000);
+  try { return await fetchV3Data(); } catch (err) { console.error('[NSE] v3 attempt 2:', err.message); }
+  return null;
 }
 
-// ══════════════════════════════════════════════════════════════════════
-// Background poll loop
-// ══════════════════════════════════════════════════════════════════════
+async function pollOnce() {
+  if (!browserReady || !warmPage || warmPage.isClosed()) {
+    const data = await initAndFetch();
+    if (data) { cachedData = data; cacheTime = Date.now(); fetchCount++; errorStreak = 0; }
+    else errorStreak++;
+    return;
+  }
+  if (fetchCount > 0 && fetchCount % 10 === 0) {
+    try { await warmSession(); } catch (_) {}
+  }
+  try {
+    const data = await fetchV3Data();
+    cachedData = data; cacheTime = Date.now(); fetchCount++; errorStreak = 0;
+    console.log(`[NSE] ✅ #${fetchCount} | ${data.records.data.length} rows | spot ${data.records.underlyingValue}`);
+  } catch (err) {
+    console.error(`[NSE] Poll failed (streak ${errorStreak + 1}):`, err.message);
+    errorStreak++;
+    if (errorStreak >= 3) { browserReady = false; errorStreak = 0; }
+  }
+}
+
 async function pollLoop() {
   while (true) {
+    try { await pollOnce(); } catch (err) { console.error('[NSE] Poll loop crash:', err.message); }
     await sleep(POLL_MS);
-    if (!accessToken) continue;
-    try {
-      const data = await fetchOptionChain();
-      cachedData = data; cacheTime = Date.now(); fetchCount++;
-      console.log(`[Fyers] ✅ #${fetchCount} | ${data.records.data.length} strikes | spot ${data.records.underlyingValue}`);
-    } catch (err) {
-      if (err.message === 'TOKEN_EXPIRED') {
-        console.log('[Fyers] ⚠️  Token expired — user needs to re-login.');
-        accessToken = null;
-      } else {
-        console.error('[Fyers] Poll error:', err.message);
-      }
-    }
   }
 }
 
-// ══════════════════════════════════════════════════════════════════════
-// Routes
-// ══════════════════════════════════════════════════════════════════════
-
-// Root route — also handles Fyers OAuth callback (Fyers redirects here with ?auth_code=)
-app.get('/', async (req, res) => {
-  const authCode = req.query.auth_code || req.query.code;
-  const state    = req.query.s || req.query.state;
-
-  // If Fyers redirected here with an auth code, process it first
-  if (authCode && (state === 'ok' || state === 'nse_dashboard')) {
-    try {
-      accessToken = await exchangeCodeForToken(authCode);
-      tokenExpiry = Date.now() + 23 * 60 * 60 * 1000; // 23h
-      console.log('[Fyers] ✅ Token received and stored.');
-      // Kick off an immediate fetch in background
-      fetchOptionChain()
-        .then(data => { cachedData = data; cacheTime = Date.now(); fetchCount++; })
-        .catch(e   => console.error('[Fyers] Initial fetch error:', e.message));
-    } catch (err) {
-      console.error('[Fyers] Token exchange error:', err.message);
-    }
-    // Redirect to clean URL so query params disappear from browser bar
-    return res.redirect('/');
-  }
-
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-// Redirect user to Fyers login page
-app.get('/auth/login', (_req, res) => res.redirect(getLoginUrl()));
-
-// Auth status — frontend polls this to know if login is needed
-app.get('/api/auth-status', (_req, res) => {
-  res.json({
-    authenticated:    !!accessToken,
-    loginUrl:         getLoginUrl(),
-    tokenExpiresInM:  accessToken ? Math.round((tokenExpiry - Date.now()) / 60000) : null,
-  });
-});
-
-// Main data endpoint
 app.get('/api/option-chain', async (req, res) => {
-  if (req.query.sample === 'true') {
+  if (req.query.sample === 'true')
     return res.json({ success: true, data: generateSampleData(), sample: true, timestamp: Date.now() });
-  }
 
-  if (!accessToken) {
-    return res.json({
-      success:   true,
-      data:      generateSampleData(),
-      sample:    true,
-      needsAuth: true,
-      loginUrl:  getLoginUrl(),
-      timestamp: Date.now(),
-      error:     'Not authenticated with Fyers — click "Login with Fyers" to enable live data.',
-    });
-  }
+  const deadline = Date.now() + 60_000;
+  while (!cachedData && Date.now() < deadline) await sleep(500);
 
   if (cachedData) {
-    const stale = Date.now() - cacheTime > 120_000; // stale after 2 min
-    return res.json({ success: true, data: cachedData, cached: true, stale, timestamp: cacheTime });
+    const stale = Date.now() - cacheTime > 180_000;
+    return res.json({ success: true, data: cachedData, cached: true, stale, timestamp: cacheTime,
+      ...(stale ? { error: 'Data may be stale' } : {}) });
   }
-
-  // No cache yet — try live fetch
-  try {
-    const data = await fetchOptionChain();
-    cachedData = data; cacheTime = Date.now(); fetchCount++;
-    return res.json({ success: true, data, timestamp: cacheTime });
-  } catch (err) {
-    const needsAuth = err.message === 'TOKEN_EXPIRED';
-    if (needsAuth) accessToken = null;
-    return res.json({
-      success:   true,
-      data:      generateSampleData(),
-      sample:    true,
-      needsAuth,
-      loginUrl:  getLoginUrl(),
-      timestamp: Date.now(),
-      error:     needsAuth ? 'Fyers token expired — please re-login.' : err.message,
-    });
-  }
+  return res.json({ success: true, data: generateSampleData(), sample: true, timestamp: Date.now(),
+    error: 'NSE data not yet available — browser still initialising.' });
 });
 
 app.get('/api/health', (_req, res) => res.json({
-  status: 'ok',
-  authenticated: !!accessToken,
-  fetchCount,
+  status: 'ok', browserReady, fetchCount, errorStreak,
   cacheAgeS: cachedData ? Math.round((Date.now() - cacheTime) / 1000) : null,
-  tokenExpiresInM: accessToken ? Math.round((tokenExpiry - Date.now()) / 60000) : null,
 }));
 
-// ══════════════════════════════════════════════════════════════════════
-// Sample / fallback data
-// ══════════════════════════════════════════════════════════════════════
+app.get('/', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+
 function generateSampleData() {
-  const spot    = 23162 + Math.random() * 50;
+  const spot    = 23100 + Math.random() * 100;
   const atm     = Math.round(spot / 50) * 50;
   const expiry  = getNextThursday();
   const strikes = Array.from({ length: 41 }, (_, i) => atm + (i - 20) * 50);
-
   const data = strikes.map(k => {
-    const d    = k - spot;
+    const d = k - spot;
     const cLtp = Math.max(0, (d < 0 ? -d : 0) + Math.random() * 80 + 5);
     const pLtp = Math.max(0, (d > 0 ?  d : 0) + Math.random() * 80 + 5);
     return {
-      strikePrice: k,
-      expiryDates: expiry,
+      strikePrice: k, expiryDates: expiry,
       CE: { strikePrice: k, expiryDate: expiry, lastPrice: +cLtp.toFixed(2),
             changeinOpenInterest: Math.round((Math.random() - 0.4) * 60000),
             openInterest: Math.round(Math.random() * 400000 + 50000), underlyingValue: spot },
@@ -313,7 +194,6 @@ function generateSampleData() {
             openInterest: Math.round(Math.random() * 500000 + 50000), underlyingValue: spot },
     };
   });
-
   return {
     records: { expiryDates: [expiry], data, timestamp: new Date().toISOString(),
                underlyingValue: +spot.toFixed(2), strikePrices: strikes },
@@ -327,11 +207,15 @@ function getNextThursday() {
   return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '-');
 }
 
-// ══════════════════════════════════════════════════════════════════════
-// Start
-// ══════════════════════════════════════════════════════════════════════
-app.listen(PORT, () => {
-  console.log(`\n🚀  NSE Option Chain Dashboard → http://localhost:${PORT}`);
-  console.log(`🔑  Login URL → ${getLoginUrl()}\n`);
+app.listen(PORT, async () => {
+  console.log(`\n🚀  NSE Option Chain Dashboard → http://localhost:${PORT}\n`);
+  try {
+    const data = await initAndFetch();
+    if (data) { cachedData = data; cacheTime = Date.now(); fetchCount++; console.log(`[NSE] ✅ Ready! ${data.records.data.length} records`); }
+    else { console.log('[NSE] Initial fetch returned nothing — poll will retry.'); browserReady = false; }
+  } catch (err) { console.error('[NSE] Startup error:', err.message); browserReady = false; }
   pollLoop();
 });
+
+process.on('SIGINT',  async () => { try { await browser?.close(); } catch (_) {} process.exit(); });
+process.on('SIGTERM', async () => { try { await browser?.close(); } catch (_) {} process.exit(); });
