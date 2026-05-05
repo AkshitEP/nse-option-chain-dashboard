@@ -18,9 +18,9 @@ const FYERS_APP_ID     = process.env.FYERS_APP_ID     || '4U7HO4T9UI-100';
 const FYERS_APP_SECRET = process.env.FYERS_APP_SECRET || '6EZC6R9K6V';
 const REDIRECT_URI     = process.env.REDIRECT_URI     || 'https://nse-option-chain-dashboard-936v.onrender.com/';
 
-const FYERS_AUTH_BASE  = 'https://api-t2.fyers.in/api/v3/generate-authcode';
-const FYERS_TOKEN_URL  = 'https://api-t2.fyers.in/api/v3/validate-authcode';
-const FYERS_OC_URL     = 'https://api-t2.fyers.in/data/v3/options-chain';
+const FYERS_AUTH_BASE  = 'https://api.fyers.in/api/v3/generate-authcode';
+const FYERS_TOKEN_URL  = 'https://api.fyers.in/api/v3/validate-authcode';
+const FYERS_OC_URL     = 'https://api.fyers.in/data/v3/options-chain';
 
 const POLL_MS = 45_000;
 
