@@ -12,8 +12,8 @@ let timerInterval = null;
 
 // Per-symbol state
 const symState = {
-  NIFTY:     { data: null, atm: null, expiry: null, expiryDates: [], customStrike: null },
-  BANKNIFTY: { data: null, atm: null, expiry: null, expiryDates: [], customStrike: null },
+  NIFTY:     { data: null, atm: null, expiry: null, expiryDates: [], customStrike: null, N: 4 },
+  BANKNIFTY: { data: null, atm: null, expiry: null, expiryDates: [], customStrike: null, N: 4 },
 };
 
 // Rolling LTP history for VWAP per strike+side
@@ -24,22 +24,13 @@ const VWAP_WINDOW = 10;
 const $ = id => document.getElementById(id);
 const prefix = sym => sym === 'NIFTY' ? 'nifty' : 'bnk';
 
-// Shared controls
+// Shared UI els (header/timer only)
 const els = {
-  nDown:        $('n-down'),
-  nUp:          $('n-up'),
-  nValue:       $('n-value'),
-  rowCountLabel:$('row-count-label'),
   timerCircle:  $('timer-circle'),
   timerText:    $('timer-text'),
   connStatus:   $('conn-status'),
   errorBanner:  $('error-banner'),
   errorMessage: $('error-message'),
-  // Header panels
-  niftySpot:   $('nifty-spot'),   niftyAtm:    $('nifty-atm'),
-  niftyPcr:    $('nifty-pcr'),    niftyImb:    $('nifty-imb'),   niftyExpiry: $('nifty-expiry'),
-  bnkSpot:     $('bnk-spot'),     bnkAtm:      $('bnk-atm'),
-  bnkPcr:      $('bnk-pcr'),      bnkImb:      $('bnk-imb'),     bnkExpiry:   $('bnk-expiry'),
 };
 
 // ── Formatters ──────────────────────────────────────────────────────
@@ -69,6 +60,65 @@ function heatLevel(val, max) {
 
 const numClass = v => v > 0 ? 'num-pos' : v < 0 ? 'num-neg' : 'num-neu';
 
+// ── PCR Phase ──────────────────────────────────────────────────
+function getPcrPhase(pcr) {
+  if (pcr == null || isNaN(pcr))
+    return { label: '—',                 cls: '',                  icon: '➖', phase: 'unknown' };
+  if (pcr > 2)
+    return { label: 'Strongly Bullish',  cls: 'phase-strong-bull', icon: '🟢', phase: 'strong-bull' };
+  if (pcr > 1.25)
+    return { label: 'Bullish',           cls: 'phase-bull',        icon: '⬆️',  phase: 'bull' };
+  if (pcr >= 0.75)
+    return { label: 'Sideways',          cls: 'phase-sideways',    icon: '⇔',  phase: 'sideways' };
+  if (pcr >= 0.5)
+    return { label: 'Bearish',           cls: 'phase-bear',        icon: '⬇️',  phase: 'bear' };
+  return   { label: 'Strongly Bearish',  cls: 'phase-strong-bear', icon: '🔴', phase: 'strong-bear' };
+}
+
+// ── Beep + Phase Toast ───────────────────────────────────────────
+let audioCtx = null;
+function beep(freq = 880, duration = 0.4) {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc  = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.type = 'sine'; osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+    osc.start(); osc.stop(audioCtx.currentTime + duration);
+  } catch (_) {}
+}
+
+const prevPhase = {};
+function checkPhaseChange(sym, newPhase, pcr) {
+  const prev = prevPhase[sym];
+  if (prev && prev !== newPhase && newPhase !== 'unknown') {
+    const p    = getPcrPhase(pcr);
+    const prev_p = getPcrPhase(0); // dummy — we show phase names anyway
+    // Beep pitch varies by bullishness
+    beep(newPhase.includes('bull') ? 1047 : 440, 0.5);
+    setTimeout(() => beep(newPhase.includes('bull') ? 1319 : 330, 0.3), 200);
+    showPhaseToast(sym, prev, newPhase, p);
+  }
+  prevPhase[sym] = newPhase;
+}
+
+function showPhaseToast(sym, fromPhase, toPhase, p) {
+  const container = document.getElementById('toast-container');
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.innerHTML = `
+    <span class="toast-icon">${p.icon}</span>
+    <div class="toast-body">
+      <span class="toast-sym">${sym} — PCR PHASE CHANGED</span>
+      <span class="toast-msg ${p.cls}">${p.label}</span>
+      <span class="toast-sub">${fromPhase.replace('-', ' ')} → ${toPhase.replace('-', ' ')}</span>
+    </div>`;
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), 4200);
+}
+
 function findATM(rows, spot) {
   if (!spot || !rows.length) return rows[Math.floor(rows.length / 2)]?.strikePrice;
   return rows.reduce((best, r) =>
@@ -89,14 +139,7 @@ function computeMaxPain(rows) {
   return result;
 }
 
-// ── Controls ────────────────────────────────────────────────────────
-els.nDown.addEventListener('click', () => { N = Math.max(1, N - 1); els.nValue.textContent = N; updateRowLabel(); SYMBOLS.forEach(s => { if (symState[s].data) renderTable(s, symState[s].data); }); });
-els.nUp.addEventListener('click',   () => { N = Math.min(20, N + 1); els.nValue.textContent = N; updateRowLabel(); SYMBOLS.forEach(s => { if (symState[s].data) renderTable(s, symState[s].data); }); });
-
-function updateRowLabel() { els.rowCountLabel.textContent = `Rows = ${2 * N + 1}`; }
-updateRowLabel();
-
-// Per-symbol expiry + strike selectors
+// Per-symbol expiry + strike + N steppers + Apply buttons
 SYMBOLS.forEach(sym => {
   const p = prefix(sym);
 
@@ -107,14 +150,30 @@ SYMBOLS.forEach(sym => {
     if (symState[sym].data) renderTable(sym, symState[sym].data);
   });
 
-  // Custom strike
+  // N stepper (per symbol)
+  const nDownBtn = $(`${p}-n-down`);
+  const nUpBtn   = $(`${p}-n-up`);
+  const nValEl   = $(`${p}-n-value`);
+  function updateN(delta) {
+    symState[sym].N = Math.min(20, Math.max(1, symState[sym].N + delta));
+    if (nValEl) nValEl.textContent = symState[sym].N;
+    if (symState[sym].data) renderTable(sym, symState[sym].data);
+  }
+  if (nDownBtn) nDownBtn.addEventListener('click', () => updateN(-1));
+  if (nUpBtn)   nUpBtn.addEventListener('click',   () => updateN(+1));
+
+  // Apply button — reads strike input and re-renders
+  const applyBtn    = $(`${p}-apply-btn`);
   const strikeInput = $(`${p}-strike-input`);
-  if (strikeInput) strikeInput.addEventListener('change', () => {
-    const v = parseFloat(strikeInput.value);
+  function applyStrike() {
+    const v    = parseFloat(strikeInput?.value);
     const step = sym === 'BANKNIFTY' ? 100 : 50;
     symState[sym].customStrike = isNaN(v) ? null : Math.round(v / step) * step;
     if (symState[sym].data) renderTable(sym, symState[sym].data);
-  });
+  }
+  if (applyBtn)    applyBtn.addEventListener('click', applyStrike);
+  if (strikeInput) strikeInput.addEventListener('keydown', e => { if (e.key === 'Enter') applyStrike(); });
+  if (strikeInput) strikeInput.addEventListener('change', applyStrike);
 });
 
 // ── Header panel updater ─────────────────────────────────────────────
@@ -137,20 +196,25 @@ function updateSymbolPanel(symbol, data) {
   const pcr    = totCOI > 0 ? totPOI / totCOI : 0;
   const imb    = (totCOI + totPOI) > 0 ? ((totPOI - totCOI) / (totPOI + totCOI) * 100) : 0;
   const imbStr = (imb >= 0 ? '+' : '') + imb.toFixed(1) + '%';
+  const phase  = getPcrPhase(pcr);
 
-  const p = prefix(symbol);
+  const pr = prefix(symbol);
   const setEl = (id, txt, color) => {
-    const el = $(id);
-    if (!el) return;
+    const el = $(id); if (!el) return;
     el.textContent = txt;
-    if (color) el.style.color = color;
+    if (color !== undefined) el.style.color = color;
   };
 
-  setEl(`${p}-spot`,   fmtSpt(spot));
-  setEl(`${p}-atm`,    atm ? atm.toLocaleString('en-IN') : '—');
-  setEl(`${p}-pcr`,    fmtPCR(pcr), pcr > 1.2 ? 'var(--green)' : pcr < 0.8 ? 'var(--red)' : 'var(--text)');
-  setEl(`${p}-imb`,    imbStr,      imb > 0 ? 'var(--green)' : 'var(--red)');
-  setEl(`${p}-expiry`, expiry);
+  setEl(`${pr}-spot`,   fmtSpt(spot));
+  setEl(`${pr}-atm`,    atm ? atm.toLocaleString('en-IN') : '—');
+  // PCR with phase colour + label
+  const pcrEl = $(`${pr}-pcr`);
+  if (pcrEl) { pcrEl.textContent = `${fmtPCR(pcr)} ${phase.label}`; pcrEl.className = `ms-value ${phase.cls}`; }
+  setEl(`${pr}-imb`,    imbStr, imb > 0 ? 'var(--green)' : 'var(--red)');
+  setEl(`${pr}-expiry`, expiry);
+
+  // Phase change detection
+  checkPhaseChange(symbol, phase.phase, pcr);
 }
 
 // ── Fetch both symbols ─────────────────────────────────────────────
@@ -239,9 +303,11 @@ function renderTable(sym, data) {
   const useRows = (fRows.length ? fRows : rows).sort((a, b) => a.strikePrice - b.strikePrice);
   const atm     = symState[sym].customStrike || symState[sym].atm || findATM(useRows, spot);
   const atmIdx  = useRows.findIndex(r => r.strikePrice === atm);
-  const lo      = Math.max(0, atmIdx - N);
-  const hi      = Math.min(useRows.length - 1, atmIdx + N);
+  const symN    = symState[sym].N ?? 4;
+  const lo      = Math.max(0, atmIdx - symN);
+  const hi      = Math.min(useRows.length - 1, atmIdx + symN);
   const vis     = useRows.slice(lo, hi + 1);
+
 
   // Heat map maxima
   const maxCallOI  = Math.max(...vis.map(r => r.CE?.openInterest || 0));
@@ -328,11 +394,15 @@ function renderTable(sym, data) {
   };
   setS(`${p}-sb-coi`,  fmtNum(totCOI));
   setS(`${p}-sb-poi`,  fmtNum(totPOI));
-  setS(`${p}-sb-pcr`,  fmtPCR(pcr), pcr > 1.2 ? 'var(--green)' : pcr < 0.8 ? 'var(--red)' : 'var(--text)');
+  // PCR with phase colour
+  const pcrSbEl = $(`${p}-sb-pcr`);
+  const sbPhase = getPcrPhase(pcr);
+  if (pcrSbEl) { pcrSbEl.textContent = fmtPCR(pcr); pcrSbEl.className = `sb-val ${sbPhase.cls}`; }
   setS(`${p}-sb-ccoi`, fmtNum(totCCOI), totCCOI >= 0 ? 'var(--green)' : 'var(--red)');
   setS(`${p}-sb-pcoi`, fmtNum(totPCOI), totPCOI >= 0 ? 'var(--green)' : 'var(--red)');
   setS(`${p}-sb-imb`,  imb.toFixed(2) + '%');
-  setS(`${p}-sb-sent`, sentiment, pcr > 1 ? 'var(--green)' : 'var(--red)');
+  const sentEl = $(`${p}-sb-sent`);
+  if (sentEl) { sentEl.textContent = `${sbPhase.icon} ${sbPhase.label}`; sentEl.className = `sb-val ${sbPhase.cls}`; }
   setS(`${p}-sb-mp`,   mp ? mp.toLocaleString('en-IN') : '—');
 }
 
