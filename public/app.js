@@ -397,6 +397,23 @@ function startTimer() {
   }, 1000);
 }
 
+// ── Theme Toggle ──────────────────────────────────────────────────────
+const themeToggleBtn = document.getElementById('theme-toggle');
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  themeToggleBtn.textContent = theme === 'light' ? '🌙' : '☀️';
+  localStorage.setItem('nse-theme', theme);
+}
+
+// Load saved preference (default: dark)
+applyTheme(localStorage.getItem('nse-theme') || 'light');
+
+themeToggleBtn.addEventListener('click', () => {
+  const current = document.documentElement.getAttribute('data-theme') || 'dark';
+  applyTheme(current === 'dark' ? 'light' : 'dark');
+});
+
 // ── Boot ─────────────────────────────────────────────────────────────
 fetchData();
 startTimer();

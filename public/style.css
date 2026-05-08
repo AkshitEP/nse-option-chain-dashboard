@@ -355,6 +355,70 @@ tr.atm-row td.td-strike {
   margin-top: auto;
 }
 
+/* ── Theme Toggle Button ─────────────────────────────────────────── */
+.theme-toggle {
+  width: 34px; height: 34px;
+  border-radius: 50%; border: 1px solid var(--border2);
+  background: var(--bg4); cursor: pointer;
+  font-size: 16px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .2s, border-color .2s, transform .15s;
+  flex-shrink: 0;
+}
+.theme-toggle:hover { background: var(--bg3); border-color: var(--purple); transform: rotate(20deg) scale(1.1); }
+
+/* ── Light Mode ──────────────────────────────────────────────────── */
+:root[data-theme="light"] {
+  --bg:         #f0f2f7;
+  --bg2:        #ffffff;
+  --bg3:        #f5f6fa;
+  --bg4:        #e8eaf0;
+  --border:     #d4d8e8;
+  --border2:    #c0c5da;
+  --text:       #1a1e2e;
+  --text2:      #4a5075;
+  --text3:      #8890b0;
+
+  --call:       #2563eb;
+  --call-dim:   rgba(37,99,235,.10);
+  --call-heat1: rgba(37,99,235,.07);
+  --call-heat2: rgba(37,99,235,.18);
+  --call-heat3: rgba(37,99,235,.32);
+  --call-heat4: rgba(37,99,235,.52);
+  --call-heat5: rgba(37,99,235,.75);
+
+  --put:        #dc2626;
+  --put-dim:    rgba(220,38,38,.10);
+  --put-heat1:  rgba(220,38,38,.07);
+  --put-heat2:  rgba(220,38,38,.18);
+  --put-heat3:  rgba(220,38,38,.32);
+  --put-heat4:  rgba(220,38,38,.52);
+  --put-heat5:  rgba(220,38,38,.75);
+
+  --green:      #16a34a;
+  --green-dim:  rgba(22,163,74,.14);
+  --red:        #dc2626;
+  --red-dim:    rgba(220,38,38,.12);
+  --gold:       #d97706;
+  --gold-dim:   rgba(217,119,6,.16);
+  --purple:     #7c3aed;
+
+  --atm-bg:     rgba(217,119,6,.10);
+  --atm-border: rgba(217,119,6,.45);
+}
+
+/* Light mode table overrides */
+:root[data-theme="light"] .chain-table tbody tr:hover { background: rgba(0,0,0,.03) !important; }
+:root[data-theme="light"] .heat-call-3,
+:root[data-theme="light"] .heat-call-4,
+:root[data-theme="light"] .heat-call-5 { color: #fff !important; }
+:root[data-theme="light"] .heat-put-3,
+:root[data-theme="light"] .heat-put-4,
+:root[data-theme="light"] .heat-put-5  { color: #fff !important; }
+:root[data-theme="light"] .top-header,
+:root[data-theme="light"] .controls-bar { box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+:root[data-theme="light"] .stat-panel   { box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+
 /* ── Responsive ─────────────────────────────────────────────────── */
 @media (max-width: 900px) {
   .stats-grid { grid-template-columns: 1fr 1fr; }
