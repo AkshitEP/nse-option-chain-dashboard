@@ -1,380 +1,402 @@
-/* ══════════════════════════════════════════════════════════════════════
-   NSE Option Chain Dashboard — Frontend Logic
-   ══════════════════════════════════════════════════════════════════════ */
+'use strict';
 
-const API_URL = '/api/option-chain';
-const REFRESH_INTERVAL = 60; // seconds
-const STRIKE_GAP = 50; // gap between strikes
+// ── Config ─────────────────────────────────────────────────────────
+const API_URL          = '/api/option-chain';
+const REFRESH_INTERVAL = 45;   // seconds between polls
 
-let userStrike = null; // null = use ATM
-let userN = 4; // N strikes above and below
-let countdown = REFRESH_INTERVAL;
-let timerInterval = null;
-let previousData = null;
-let lastRawData = null; // store raw data for re-processing on settings change
+// ── State ──────────────────────────────────────────────────────────
+let allData        = null;   // full option chain rows
+let atmStrike      = null;
+let expiryDates    = [];
+let selectedExpiry = null;
+let N              = 4;
+let customStrike   = null;
+let countdown      = REFRESH_INTERVAL;
+let timerInterval  = null;
 
-// ── DOM Elements ─────────────────────────────────────────────────────
-const $ = id => document.getElementById(id);
-
+// ── DOM refs ────────────────────────────────────────────────────────
 const els = {
-    spotPrice: $('spotPrice'),
-    spotChange: $('spotChange'),
-    atmStrike: $('atmStrike'),
-    timerText: $('timerText'),
-    timerCircle: $('timerCircle'),
-    lastUpdate: $('lastUpdate'),
-    connectionStatus: $('connectionStatus'),
-    expiryInfo: $('expiryInfo'),
-    ocTableBody: $('ocTableBody'),
-    footCallCoi: $('footCallCoi'),
-    footPutCoi: $('footPutCoi'),
-    pcrValue: $('pcrValue'),
-    pcrTrend: $('pcrTrend'),
-    imbalanceValue: $('imbalanceValue'),
-    imbalanceSignal: $('imbalanceSignal'),
-    callCoiValue: $('callCoiValue'),
-    callCoiPct: $('callCoiPct'),
-    putCoiValue: $('putCoiValue'),
-    putCoiPct: $('putCoiPct'),
-    totalCoiValue: $('totalCoiValue'),
-    errorBanner: $('errorBanner'),
-    errorMessage: $('errorMessage'),
-    strikeInput: $('strikeInput'),
-    nInput: $('nInput'),
-    tableTitle: $('tableTitle'),
+  spotPrice:    document.getElementById('spot-price'),
+  atmDisplay:   document.getElementById('atm-display'),
+  pcrValue:     document.getElementById('pcr-value'),
+  expiryLabel:  document.getElementById('expiry-label'),
+  tableTitle:   document.getElementById('table-title'),
+  lastUpdate:   document.getElementById('last-update'),
+  chainBody:    document.getElementById('chain-body'),
+  footCallCoi:  document.getElementById('foot-call-coi'),
+  footCallOi:   document.getElementById('foot-call-oi'),
+  footPutOi:    document.getElementById('foot-put-oi'),
+  footPutCoi:   document.getElementById('foot-put-coi'),
+  timerCircle:  document.getElementById('timer-circle'),
+  timerText:    document.getElementById('timer-text'),
+  connStatus:   document.getElementById('conn-status'),
+  errorBanner:  document.getElementById('error-banner'),
+  errorMessage: document.getElementById('error-message'),
+  strikeInput:  document.getElementById('strike-input'),
+  nValue:       document.getElementById('n-value'),
+  nDown:        document.getElementById('n-down'),
+  nUp:          document.getElementById('n-up'),
+  applyBtn:     document.getElementById('apply-btn'),
+  rowCountLabel:document.getElementById('row-count-label'),
+  expirySel:    document.getElementById('expiry-selector'),
+  expirySelect: document.getElementById('expiry-select'),
+  // Stats
+  stCallOi:     document.getElementById('st-call-oi'),
+  stPutOi:      document.getElementById('st-put-oi'),
+  stTotalOi:    document.getElementById('st-total-oi'),
+  stCallCoi:    document.getElementById('st-call-coi'),
+  stPutCoi:     document.getElementById('st-put-coi'),
+  stPcr:        document.getElementById('st-pcr'),
+  stPcrCoi:     document.getElementById('st-pcr-coi'),
+  stImbalance:  document.getElementById('st-imbalance'),
+  stSentiment:  document.getElementById('st-sentiment'),
+  stMaxpain:    document.getElementById('st-maxpain'),
+  stItmCallOi:  document.getElementById('st-itm-call-oi'),
+  stItmPutOi:   document.getElementById('st-itm-put-oi'),
+  stItmCallCoi: document.getElementById('st-itm-call-coi'),
+  stItmPutCoi:  document.getElementById('st-itm-put-coi'),
+  stItmPcr:     document.getElementById('st-itm-pcr'),
+  stOtmCallOi:  document.getElementById('st-otm-call-oi'),
+  stOtmPutOi:   document.getElementById('st-otm-put-oi'),
+  stOtmCallCoi: document.getElementById('st-otm-call-coi'),
+  stOtmPutCoi:  document.getElementById('st-otm-put-coi'),
+  stOtmPcr:     document.getElementById('st-otm-pcr'),
 };
 
-// ── Utility Functions ────────────────────────────────────────────────
-function formatNum(n, decimals = 0) {
-    if (n === undefined || n === null || isNaN(n)) return '--';
-    return Number(n).toLocaleString('en-IN', {
-        minimumFractionDigits: decimals,
-        maximumFractionDigits: decimals,
-    });
+// ── Formatters ──────────────────────────────────────────────────────
+const fmtNum  = n => n == null || isNaN(n) ? '—' : Math.abs(n) >= 1e6
+  ? (n / 1e6).toFixed(2) + 'M' : Math.abs(n) >= 1e3
+  ? (n / 1e3).toFixed(1) + 'K' : n.toFixed(0);
+const fmtPct  = n => n == null || isNaN(n) ? '—' : (n > 0 ? '+' : '') + n.toFixed(2) + '%';
+const fmtLTP  = n => n == null || isNaN(n) || n === 0 ? '—' : n.toFixed(2);
+const fmtPCR  = n => n == null || isNaN(n) ? '—' : n.toFixed(2);
+const fmtSpt  = n => n == null ? '—' : n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+function oiChgPct(coi, oi) {
+  const prevOI = oi - coi;
+  if (prevOI <= 0) return null;
+  return (coi / prevOI) * 100;
 }
 
-function formatPct(n) {
-    if (n === undefined || n === null || isNaN(n) || !isFinite(n)) return '--';
-    return n.toFixed(2) + '%';
+function heatLevel(val, max) {
+  if (!max || max === 0) return 0;
+  const ratio = Math.abs(val) / max;
+  if (ratio > 0.85) return 5;
+  if (ratio > 0.65) return 4;
+  if (ratio > 0.45) return 3;
+  if (ratio > 0.25) return 2;
+  if (ratio > 0.08) return 1;
+  return 0;
 }
 
-function getClosestStrike(spotPrice, strikePrices) {
-    let closest = strikePrices[0];
-    let minDiff = Math.abs(spotPrice - closest);
-    for (const sp of strikePrices) {
-        const diff = Math.abs(spotPrice - sp);
-        if (diff < minDiff) {
-            minDiff = diff;
-            closest = sp;
-        }
-    }
-    return closest;
+function trend(coi) {
+  if (coi > 0)  return '<span class="trend-bull">Bullish</span>';
+  if (coi < 0)  return '<span class="trend-bear">Bearish</span>';
+  return '<span class="trend-neut">—</span>';
 }
 
-// ── Fetch & Process Data ─────────────────────────────────────────────
+function numClass(val) {
+  if (val > 0) return 'num-pos';
+  if (val < 0) return 'num-neg';
+  return 'num-neu';
+}
+
+// ── Controls ────────────────────────────────────────────────────────
+els.nDown.addEventListener('click', () => { N = Math.max(1, N - 1); els.nValue.textContent = N; updateRowLabel(); });
+els.nUp.addEventListener('click',   () => { N = Math.min(20, N + 1); els.nValue.textContent = N; updateRowLabel(); });
+els.applyBtn.addEventListener('click', () => {
+  const v = parseFloat(els.strikeInput.value);
+  customStrike = isNaN(v) ? null : Math.round(v / 50) * 50;
+  selectedExpiry = els.expirySelect.value || null;
+  if (allData) renderTable(allData);
+});
+els.expirySelect.addEventListener('change', () => {
+  selectedExpiry = els.expirySelect.value || null;
+  if (allData) renderTable(allData);
+});
+function updateRowLabel() {
+  els.rowCountLabel.textContent = `Total rows = 2×${N}+1 = ${2 * N + 1}`;
+}
+updateRowLabel();
+
+// ── Fetch & Process ─────────────────────────────────────────────────
 async function fetchData() {
-    try {
-        setConnectionStatus('connecting');
-        const res  = await fetch(API_URL);
-        const json = await res.json();
+  try {
+    setConn('connecting');
+    const res  = await fetch(API_URL);
+    const json = await res.json();
+    if (!json.success) throw new Error(json.error || 'Server error');
 
-        if (!json.success) {
-            throw new Error(json.error || 'Failed to fetch data');
-        }
+    processData(json.data);
 
-        const data = json.data;
-        processData(data);
-
-        if (json.needsAuth && json.loginUrl) {
-            // Not authenticated with Fyers — show login button
-            setConnectionStatus('sample');
-            showError(
-                `Live data requires Fyers login. <a href="${json.loginUrl}" style="color:#7c6af7;font-weight:600;text-decoration:underline;">Click here to Login with Fyers →</a>`,
-                true /* isHTML */
-            );
-        } else if (json.sample) {
-            setConnectionStatus('sample');
-            showError(json.error || 'Showing sample data — will auto-refresh.');
-        } else if (json.stale) {
-            setConnectionStatus('connected');
-            showError('Using cached data — live refresh temporarily unavailable.');
-        } else {
-            setConnectionStatus('connected');
-            hideError();
-        }
-
-    } catch (err) {
-        console.error('Fetch error:', err);
-        setConnectionStatus('error');
-        showError(err.message || 'Failed to fetch data');
+    if (json.needsAuth && json.loginUrl) {
+      setConn('sample');
+      showError(`Live data requires Fyers login. <a href="${json.loginUrl}" style="color:#a855f7;font-weight:600">Login with Fyers →</a>`, true);
+    } else if (json.sample) {
+      setConn('sample');
+      showError(json.error || 'Showing sample data — live feed unavailable.');
+    } else if (json.stale) {
+      setConn('connected');
+      showError('Using cached data — live refresh temporarily unavailable.');
+    } else {
+      setConn('connected');
+      hideError();
     }
-
-    resetTimer();
+  } catch (err) {
+    console.error(err);
+    setConn('error');
+    showError(err.message || 'Failed to fetch data');
+  }
+  resetTimer();
 }
 
+// ── Process NSE / Fyers data ────────────────────────────────────────
 function processData(data) {
-    lastRawData = data; // store for re-processing
-    const records = data.records;
+  const records = data.records || {};
+  let rows = records.data || data.filtered?.data || [];
+  if (!rows.length) return;
 
-    // Get spot price (underlying value)
-    const spotPrice = records.underlyingValue;
-    const expiryDates = records.expiryDates;
-    const nearestExpiry = expiryDates[0]; // current week expiry
+  const spot = records.underlyingValue || rows.find(r => r.CE?.underlyingValue)?.CE?.underlyingValue || 0;
+  expiryDates = records.expiryDates || [];
 
-    // Get all strike data for the nearest expiry
-    // NOTE: v3 API uses 'expiryDates' (plural) per row; old API used 'expiryDate'
-    const allData = records.data.filter(d =>
-        (d.expiryDate === nearestExpiry) || (d.expiryDates === nearestExpiry)
-    );
+  // Populate expiry dropdown
+  if (expiryDates.length > 1 && els.expirySelect.options.length === 0) {
+    expiryDates.forEach(e => {
+      const opt = document.createElement('option');
+      opt.value = opt.textContent = e;
+      els.expirySelect.appendChild(opt);
+    });
+    els.expirySel.style.display = 'flex';
+  }
+  if (!selectedExpiry && expiryDates.length) selectedExpiry = expiryDates[0];
 
-    // Build a set of available strike prices
-    const allStrikes = allData
-        .map(d => d.strikePrice)
-        .sort((a, b) => a - b);
+  // Filter by expiry
+  const expiry = selectedExpiry || expiryDates[0];
+  const filtered = rows.filter(r => {
+    const d = r.expiryDates || r.CE?.expiryDate || r.PE?.expiryDate || '';
+    return !expiry || d === expiry || d.includes(expiry);
+  });
+  const useRows = filtered.length ? filtered : rows;
 
-    // Determine center strike: user-specified or ATM
-    const atmStrike = getClosestStrike(spotPrice, allStrikes);
-    const centerStrike = userStrike !== null ? userStrike : atmStrike;
-    const n = userN;
+  // ATM strike
+  const atm = customStrike || findATM(useRows, spot);
+  atmStrike = atm;
 
-    // Build strikes: centerStrike ± N * STRIKE_GAP
-    const selectedStrikes = [];
-    for (let i = -n; i <= n; i++) {
-        selectedStrikes.push(centerStrike + i * STRIKE_GAP);
-    }
-    // Reverse so highest strike is on top (matching Excel layout)
-    selectedStrikes.reverse();
+  // Update header
+  els.spotPrice.textContent = fmtSpt(spot);
+  els.atmDisplay.textContent = atm ? atm.toLocaleString('en-IN') : '—';
+  els.expiryLabel.textContent = expiry || '—';
+  els.lastUpdate.textContent = new Date().toLocaleTimeString('en-IN', { hour12: true, hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-    // Build strike data map
-    const strikeMap = {};
-    for (const d of allData) {
-        strikeMap[d.strikePrice] = d;
-    }
-
-    // Calculate metrics for selected strikes
-    const rows = [];
-    let totalCallCoi = 0;
-    let totalPutCoi = 0;
-
-    for (let i = 0; i < selectedStrikes.length; i++) {
-        const strike = selectedStrikes[i];
-        const d = strikeMap[strike];
-
-        const callLTP = d && d.CE ? d.CE.lastPrice : 0;
-        const callCOI = d && d.CE ? d.CE.changeinOpenInterest : 0;
-        const putLTP = d && d.PE ? d.PE.lastPrice : 0;
-        const putCOI = d && d.PE ? d.PE.changeinOpenInterest : 0;
-
-        totalCallCoi += callCOI;
-        totalPutCoi += putCOI;
-
-        rows.push({
-            sno: i + 1,
-            strike,
-            callLTP,
-            callCOI,
-            putLTP,
-            putCOI,
-            isATM: strike === atmStrike,
-            isCenter: strike === centerStrike,
-        });
-    }
-
-    // Calculate imbalance for each row
-    for (const row of rows) {
-        // Imbalance vs Call: (callCOI - putCOI) / callCOI * 100
-        row.imbVsCall = row.callCOI !== 0 ? ((row.callCOI - row.putCOI) / Math.abs(row.callCOI)) * 100 : 0;
-        // Imbalance vs Put: (callCOI - putCOI) / putCOI * 100
-        row.imbVsPut = row.putCOI !== 0 ? ((row.callCOI - row.putCOI) / Math.abs(row.putCOI)) * 100 : 0;
-    }
-
-    const totalCoi = Math.abs(totalCallCoi) + Math.abs(totalPutCoi);
-    const pcr = totalCallCoi !== 0 ? totalPutCoi / totalCallCoi : 0;
-    const imbalance = totalCoi !== 0 ? (Math.abs(totalPutCoi - totalCallCoi) / totalCoi) * 100 : 0;
-    const callPct = totalCoi !== 0 ? (Math.abs(totalCallCoi) / totalCoi) * 100 : 0;
-    const putPct = totalCoi !== 0 ? (Math.abs(totalPutCoi) / totalCoi) * 100 : 0;
-
-    // ── Update UI ──────────────────────────────────────────────────────
-    updateHeader(spotPrice, atmStrike, nearestExpiry);
-    updateSummaryCards(pcr, imbalance, totalCallCoi, totalPutCoi, totalCoi, callPct, putPct);
-    updateTable(rows, totalCallCoi, totalPutCoi);
-    updateTableTitle(centerStrike, n);
-    updateLastRefreshTime();
-
-    previousData = { rows, totalCallCoi, totalPutCoi };
+  allData = data;
+  renderTable(data);
 }
 
-// ── Apply Settings (called when user clicks Apply) ───────────────────
-function applySettings() {
-    const strikeVal = els.strikeInput.value.trim();
-    const nVal = parseInt(els.nInput.value);
+function findATM(rows, spot) {
+  if (!spot) return rows[Math.floor(rows.length / 2)]?.strikePrice;
+  return rows.reduce((best, r) => {
+    const sp = r.strikePrice;
+    return Math.abs(sp - spot) < Math.abs(best - spot) ? sp : best;
+  }, rows[0]?.strikePrice);
+}
 
-    userStrike = strikeVal ? parseInt(strikeVal) : null;
-    userN = isNaN(nVal) || nVal < 1 ? 4 : Math.min(nVal, 20);
+// ── Render Table ────────────────────────────────────────────────────
+function renderTable(data) {
+  const records = data.records || {};
+  let rows = records.data || data.filtered?.data || [];
+  const spot = records.underlyingValue || 0;
+  const expiry = selectedExpiry || expiryDates[0];
 
-    // Re-process last data with new settings
-    if (lastRawData) {
-        processData(lastRawData);
+  const filtered = rows.filter(r => {
+    const d = r.expiryDates || r.CE?.expiryDate || r.PE?.expiryDate || '';
+    return !expiry || d === expiry || d.includes(expiry);
+  });
+  const useRows = filtered.length ? filtered : rows;
+  useRows.sort((a, b) => a.strikePrice - b.strikePrice);
+
+  const atm = customStrike || atmStrike || findATM(useRows, spot);
+  const atmIdx = useRows.findIndex(r => r.strikePrice === atm);
+  const lo  = Math.max(0, atmIdx - N);
+  const hi  = Math.min(useRows.length - 1, atmIdx + N);
+  const vis = useRows.slice(lo, hi + 1);
+
+  // ── Heat map maximums ──────────────────────────────────────────
+  const maxCallOI  = Math.max(...vis.map(r => Math.abs(r.CE?.openInterest || 0)));
+  const maxPutOI   = Math.max(...vis.map(r => Math.abs(r.PE?.openInterest || 0)));
+  const maxCallCOI = Math.max(...vis.map(r => Math.abs(r.CE?.changeinOpenInterest || 0)));
+  const maxPutCOI  = Math.max(...vis.map(r => Math.abs(r.PE?.changeinOpenInterest || 0)));
+
+  // ── Max Pain (strike with min total pain) ──────────────────────
+  const maxPain = computeMaxPain(useRows);
+
+  // ── Stats accumulators ─────────────────────────────────────────
+  let totCallOI = 0, totPutOI = 0, totCallCOI = 0, totPutCOI = 0;
+  let itmCOI = 0, itmPOI = 0, itmCCOI = 0, itmPCOI = 0;
+  let otmCOI = 0, otmPOI = 0, otmCCOI = 0, otmPCOI = 0;
+
+  vis.forEach(r => {
+    const sp = r.strikePrice;
+    const cOI  = r.CE?.openInterest || 0;
+    const pOI  = r.PE?.openInterest || 0;
+    const cCOI = r.CE?.changeinOpenInterest || 0;
+    const pCOI = r.PE?.changeinOpenInterest || 0;
+    totCallOI += cOI; totPutOI += pOI;
+    totCallCOI += cCOI; totPutCOI += pCOI;
+    if (sp < atm) { // ITM calls, OTM puts
+      itmCOI += cOI; itmCCOI += cCOI; otmPOI += pOI; otmPCOI += pCOI;
+    } else if (sp > atm) { // OTM calls, ITM puts
+      otmCOI += cOI; otmCCOI += cCOI; itmPOI += pOI; itmPCOI += pCOI;
     }
-}
+  });
 
-function updateTableTitle(centerStrike, n) {
-    const totalRows = 2 * n + 1;
-    const label = userStrike !== null ? `Strike ${formatNum(centerStrike)}` : 'ATM';
-    els.tableTitle.textContent = `Option Chain — ${totalRows} Strikes Around ${label}`;
-}
+  const pcr    = totCallOI  > 0 ? totPutOI  / totCallOI  : 0;
+  const pcrCOI = totCallCOI > 0 ? totPutCOI / totCallCOI : 0;
+  const imb    = (totCallOI + totPutOI) > 0 ? Math.abs(totPutOI - totCallOI) / (totPutOI + totCallOI) * 100 : 0;
 
-// ── UI Update Functions ──────────────────────────────────────────────
-function updateHeader(spotPrice, atmStrike, expiry) {
-    els.spotPrice.textContent = formatNum(spotPrice, 2);
+  // Update header PCR
+  const pcrEl = els.pcrValue;
+  pcrEl.textContent = fmtPCR(pcr);
+  pcrEl.style.color = pcr > 1.2 ? 'var(--green)' : pcr < 0.8 ? 'var(--red)' : 'var(--text)';
 
-    // We don't have previous close easily, so just show the value
-    els.spotChange.textContent = `ATM: ${atmStrike}`;
-    els.spotChange.className = 'spot-change up';
+  // ── Table title ────────────────────────────────────────────────
+  const actualN = Math.min(atmIdx - lo, hi - atmIdx);
+  els.tableTitle.textContent = `Option Chain — ${vis.length} Strikes Around ATM (${atm?.toLocaleString('en-IN')})`;
 
-    els.atmStrike.textContent = formatNum(atmStrike);
-    els.expiryInfo.textContent = `Expiry: ${expiry}`;
-}
+  // ── Build rows ─────────────────────────────────────────────────
+  let html = '';
+  vis.forEach(r => {
+    const sp    = r.strikePrice;
+    const isATM = sp === atm;
+    const ce    = r.CE || {};
+    const pe    = r.PE || {};
 
-function updateSummaryCards(pcr, imbalance, callCoi, putCoi, totalCoi, callPct, putPct) {
-    // PCR
-    els.pcrValue.textContent = pcr.toFixed(2);
-    els.pcrTrend.textContent = pcr > 1 ? '▲ BULLISH' : pcr < 1 ? '▼ BEARISH' : '● NEUTRAL';
-    els.pcrTrend.className = `card-trend ${pcr > 1 ? 'bullish' : pcr < 1 ? 'bearish' : 'neutral'}`;
+    const cOI   = ce.openInterest || 0;
+    const pOI   = pe.openInterest || 0;
+    const cCOI  = ce.changeinOpenInterest || 0;
+    const pCOI  = pe.changeinOpenInterest || 0;
+    const cLTP  = ce.lastPrice || 0;
+    const pLTP  = pe.lastPrice || 0;
+
+    // OI Chg%
+    const cOIP  = oiChgPct(cCOI, cOI);
+    const pOIP  = oiChgPct(pCOI, pOI);
 
     // Imbalance
-    els.imbalanceValue.textContent = formatPct(imbalance);
-    const bullish = putCoi > callCoi;
-    els.imbalanceSignal.textContent = bullish ? '▲ BULLISH' : '▼ BEARISH';
-    els.imbalanceSignal.className = `card-signal ${bullish ? 'bullish' : 'bearish'}`;
+    const cImb  = pCOI !== 0 ? (cCOI - pCOI) / Math.abs(pCOI) * 100 : null;
+    const pImb  = cCOI !== 0 ? (pCOI - cCOI) / Math.abs(cCOI) * 100 : null;
 
-    // Call COI
-    els.callCoiValue.textContent = formatNum(callCoi);
-    els.callCoiValue.style.color = callCoi >= 0 ? 'var(--green-bright)' : 'var(--red-bright)';
-    els.callCoiPct.textContent = formatPct(callPct) + ' of total';
+    // Heat levels
+    const hCOI  = heatLevel(cOI,  maxCallOI);
+    const hPOI  = heatLevel(pOI,  maxPutOI);
+    const hCCOI = heatLevel(cCOI, maxCallCOI);
+    const hPCOI = heatLevel(pCOI, maxPutCOI);
 
-    // Put COI
-    els.putCoiValue.textContent = formatNum(putCoi);
-    els.putCoiValue.style.color = putCoi >= 0 ? 'var(--green-bright)' : 'var(--red-bright)';
-    els.putCoiPct.textContent = formatPct(putPct) + ' of total';
+    const rowClass = isATM ? ' class="atm-row"' : '';
 
-    // Total COI
-    els.totalCoiValue.textContent = formatNum(totalCoi);
+    html += `<tr${rowClass}>
+      <td class="call-side">${trend(cCOI)}</td>
+      <td class="call-side ${numClass(cOIP)}">${cOIP != null ? fmtPct(cOIP) : '—'}</td>
+      <td class="call-side heat-call-${hCCOI} ${numClass(cCOI)}">${fmtNum(cCOI)}</td>
+      <td class="call-side heat-call-${hCOI}">${fmtNum(cOI)}</td>
+      <td class="call-side ltp-val">${fmtLTP(cLTP)}</td>
+      <td class="call-side ${cImb != null ? (cImb > 0 ? 'imb-pos' : 'imb-neg') : 'num-neu'}">${cImb != null ? fmtPct(cImb) : '—'}</td>
+      <td class="td-strike">${sp.toLocaleString('en-IN')}</td>
+      <td class="put-side ${pImb != null ? (pImb > 0 ? 'imb-pos' : 'imb-neg') : 'num-neu'}">${pImb != null ? fmtPct(pImb) : '—'}</td>
+      <td class="put-side ltp-val">${fmtLTP(pLTP)}</td>
+      <td class="put-side heat-put-${hPOI}">${fmtNum(pOI)}</td>
+      <td class="put-side heat-put-${hPCOI} ${numClass(pCOI)}">${fmtNum(pCOI)}</td>
+      <td class="put-side ${numClass(pOIP)}">${pOIP != null ? fmtPct(pOIP) : '—'}</td>
+      <td class="put-side">${trend(pCOI)}</td>
+    </tr>`;
+  });
+  els.chainBody.innerHTML = html;
+
+  // ── Footer totals ──────────────────────────────────────────────
+  const setFoot = (el, val, cls) => { el.textContent = fmtNum(val); el.className = `foot-val ${cls}`; el.style.color = val >= 0 ? 'var(--call)' : 'var(--red)'; };
+  setFoot(els.footCallCoi, totCallCOI, 'call-side');
+  setFoot(els.footCallOi,  totCallOI,  'call-side');
+  setFoot(els.footPutOi,   totPutOI,   'put-side');
+  setFoot(els.footPutCoi,  totPutCOI,  'put-side');
+
+  // ── Stats panels ───────────────────────────────────────────────
+  const setS = (el, val, cls) => { el.textContent = val; if (cls) el.className = `sp-val ${cls}`; };
+  setS(els.stCallOi,  fmtNum(totCallOI));
+  setS(els.stPutOi,   fmtNum(totPutOI));
+  setS(els.stTotalOi, fmtNum(totCallOI + totPutOI));
+  setS(els.stCallCoi, fmtNum(totCallCOI), totCallCOI >= 0 ? 'green' : 'red');
+  setS(els.stPutCoi,  fmtNum(totPutCOI),  totPutCOI  >= 0 ? 'green' : 'red');
+  setS(els.stPcr,      fmtPCR(pcr),    pcr > 1.2 ? 'green' : pcr < 0.8 ? 'red' : '');
+  setS(els.stPcrCoi,   fmtPCR(Math.abs(pcrCOI)));
+  setS(els.stImbalance, imb.toFixed(2) + '%');
+  const sentiment = pcr > 1.3 ? 'Bullish 🟢' : pcr < 0.7 ? 'Bearish 🔴' : pcr > 1 ? 'Mildly Bullish' : 'Mildly Bearish';
+  setS(els.stSentiment, sentiment, pcr > 1 ? 'green' : 'red');
+  setS(els.stMaxpain, maxPain ? maxPain.toLocaleString('en-IN') : '—');
+
+  // ITM / OTM
+  setS(els.stItmCallOi,  fmtNum(itmCOI));
+  setS(els.stItmPutOi,   fmtNum(itmPOI));
+  setS(els.stItmCallCoi, fmtNum(itmCCOI), itmCCOI >= 0 ? 'green' : 'red');
+  setS(els.stItmPutCoi,  fmtNum(itmPCOI), itmPCOI >= 0 ? 'green' : 'red');
+  setS(els.stItmPcr,     itmCOI > 0 ? fmtPCR(itmPOI / itmCOI) : '—');
+
+  setS(els.stOtmCallOi,  fmtNum(otmCOI));
+  setS(els.stOtmPutOi,   fmtNum(otmPOI));
+  setS(els.stOtmCallCoi, fmtNum(otmCCOI), otmCCOI >= 0 ? 'green' : 'red');
+  setS(els.stOtmPutCoi,  fmtNum(otmPCOI), otmPCOI >= 0 ? 'green' : 'red');
+  setS(els.stOtmPcr,     otmCOI > 0 ? fmtPCR(otmPOI / otmCOI) : '—');
 }
 
-function updateTable(rows, totalCallCoi, totalPutCoi) {
-    const tbody = els.ocTableBody;
-    let html = '';
-
-    for (const row of rows) {
-        const rowClasses = [];
-        if (row.isATM) rowClasses.push('atm-row');
-        if (row.isCenter && userStrike !== null) rowClasses.push('center-row');
-        const classStr = rowClasses.join(' ');
-        const callCoiClass = row.callCOI > 0 ? 'positive' : row.callCOI < 0 ? 'negative' : '';
-        const putCoiClass = row.putCOI > 0 ? 'positive' : row.putCOI < 0 ? 'negative' : '';
-        const imbCallClass = row.imbVsCall > 0 ? 'positive' : row.imbVsCall < 0 ? 'negative' : '';
-        const imbPutClass = row.imbVsPut > 0 ? 'positive' : row.imbVsPut < 0 ? 'negative' : '';
-
-        html += `
-      <tr class="${classStr}">
-        <td class="cell-sno">${row.sno}</td>
-        <td class="cell-ltp">${formatNum(row.callLTP, 2)}</td>
-        <td class="cell-coi ${callCoiClass}">${formatNum(row.callCOI)}</td>
-        <td class="cell-strike">${formatNum(row.strike)}</td>
-        <td class="cell-ltp">${formatNum(row.putLTP, 2)}</td>
-        <td class="cell-coi ${putCoiClass}">${formatNum(row.putCOI)}</td>
-        <td class="cell-imb ${imbCallClass}">${formatPct(row.imbVsCall)}</td>
-        <td class="cell-imb ${imbPutClass}">${formatPct(row.imbVsPut)}</td>
-      </tr>
-    `;
-    }
-
-    tbody.innerHTML = html;
-
-    // Update footer totals
-    els.footCallCoi.textContent = formatNum(totalCallCoi);
-    els.footCallCoi.style.color = totalCallCoi >= 0 ? 'var(--green-bright)' : 'var(--red-bright)';
-    els.footPutCoi.textContent = formatNum(totalPutCoi);
-    els.footPutCoi.style.color = totalPutCoi >= 0 ? 'var(--green-bright)' : 'var(--red-bright)';
-}
-
-function updateLastRefreshTime() {
-    const now = new Date();
-    els.lastUpdate.textContent = now.toLocaleTimeString('en-IN', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: true,
+// ── Max Pain ────────────────────────────────────────────────────────
+function computeMaxPain(rows) {
+  let minPain = Infinity, maxPainStrike = null;
+  rows.forEach(target => {
+    const sp = target.strikePrice;
+    let pain = 0;
+    rows.forEach(r => {
+      // Calls: pain to sellers = max(0, sp - strike) * OI
+      pain += Math.max(0, sp - r.strikePrice) * (r.CE?.openInterest || 0);
+      // Puts: pain to sellers = max(0, strike - sp) * OI
+      pain += Math.max(0, r.strikePrice - sp) * (r.PE?.openInterest || 0);
     });
+    if (pain < minPain) { minPain = pain; maxPainStrike = sp; }
+  });
+  return maxPainStrike;
 }
 
 // ── Connection Status ────────────────────────────────────────────────
-function setConnectionStatus(status) {
-    const el = els.connectionStatus;
-    el.className = 'connection-status';
-    switch (status) {
-        case 'connected':
-            el.classList.add('connected');
-            el.querySelector('span:last-child').textContent = 'Live';
-            break;
-        case 'sample':
-            el.classList.add('sample');
-            el.querySelector('span:last-child').textContent = 'Sample Data';
-            break;
-        case 'error':
-            el.classList.add('error');
-            el.querySelector('span:last-child').textContent = 'Error';
-            break;
-        default:
-            el.querySelector('span:last-child').textContent = 'Connecting...';
-    }
+function setConn(status) {
+  const labels = { connecting: 'Connecting', connected: 'Live', sample: 'Sample Data', error: 'Error' };
+  els.connStatus.className = `conn-pill conn-${status}`;
+  els.connStatus.querySelector('.conn-label').textContent = labels[status] || status;
 }
 
-// ── Error Handling ───────────────────────────────────────────────────
-function showError(message, isHTML = false) {
-    els.errorBanner.style.display = 'flex';
-    if (isHTML) {
-        els.errorMessage.innerHTML = message;
-    } else {
-        els.errorMessage.textContent = message;
-    }
+// ── Error Banner ─────────────────────────────────────────────────────
+function showError(msg, isHTML = false) {
+  els.errorBanner.style.display = 'flex';
+  if (isHTML) els.errorMessage.innerHTML = msg;
+  else        els.errorMessage.textContent = msg;
 }
+function hideError() { els.errorBanner.style.display = 'none'; }
 
-function hideError() {
-    els.errorBanner.style.display = 'none';
-}
-
-// ── Timer ────────────────────────────────────────────────────────────
+// ── Countdown Timer ──────────────────────────────────────────────────
 function resetTimer() {
-    countdown = REFRESH_INTERVAL;
-    updateTimerDisplay();
+  countdown = REFRESH_INTERVAL;
+  updateTimerDisplay();
 }
-
 function updateTimerDisplay() {
-    els.timerText.textContent = countdown;
-
-    // Update circular progress
-    const circumference = 2 * Math.PI * 15; // r=15
-    const progress = (countdown / REFRESH_INTERVAL) * circumference;
-    els.timerCircle.setAttribute('stroke-dashoffset', circumference - progress);
+  els.timerText.textContent = countdown;
+  const C = 2 * Math.PI * 15;  // circumference for r=15
+  els.timerCircle.setAttribute('stroke-dashoffset', C - (countdown / REFRESH_INTERVAL) * C);
 }
-
 function startTimer() {
-    if (timerInterval) clearInterval(timerInterval);
-
-    timerInterval = setInterval(() => {
-        countdown--;
-        updateTimerDisplay();
-
-        if (countdown <= 0) {
-            fetchData();
-        }
-    }, 1000);
+  if (timerInterval) clearInterval(timerInterval);
+  timerInterval = setInterval(() => {
+    countdown--;
+    updateTimerDisplay();
+    if (countdown <= 0) fetchData();
+  }, 1000);
 }
 
-// ── Initialize ───────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
-    fetchData();
-    startTimer();
-});
+// ── Boot ─────────────────────────────────────────────────────────────
+fetchData();
+startTimer();
