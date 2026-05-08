@@ -61,11 +61,22 @@
   <!-- ── Controls Bar ───────────────────────────────────────────── -->
   <div class="controls-bar">
     <div class="ctrl-group">
+      <label class="ctrl-label">SYMBOL</label>
+      <div class="symbol-tabs">
+        <button class="sym-tab active" id="sym-NIFTY"     data-symbol="NIFTY">NIFTY</button>
+        <button class="sym-tab"        id="sym-BANKNIFTY" data-symbol="BANKNIFTY">BANKNIFTY</button>
+        <button class="sym-tab"        id="sym-FINNIFTY"  data-symbol="FINNIFTY">FINNIFTY</button>
+      </div>
+    </div>
+
+    <div class="ctrl-divider"></div>
+
+    <div class="ctrl-group">
       <label class="ctrl-label">STRIKE PRICE</label>
       <input type="number" id="strike-input" class="ctrl-input" placeholder="Auto (ATM)" step="50" />
     </div>
     <div class="ctrl-group">
-      <label class="ctrl-label">STRIKES ABOVE &amp; BELOW (N)</label>
+      <label class="ctrl-label">STRIKES ± N</label>
       <div class="stepper">
         <button class="step-btn" id="n-down">−</button>
         <span class="step-val" id="n-value">4</span>
@@ -73,7 +84,7 @@
       </div>
     </div>
     <button class="apply-btn" id="apply-btn">Apply</button>
-    <div class="ctrl-info" id="row-count-label">Total rows = 2N+1</div>
+    <div class="ctrl-info" id="row-count-label">Rows = 2N+1</div>
 
     <div class="expiry-selector" id="expiry-selector" style="display:none;">
       <label class="ctrl-label">EXPIRY</label>
@@ -92,27 +103,29 @@
       <table class="chain-table" id="chain-table">
         <thead>
           <tr class="head-group">
-            <th colspan="6" class="head-calls">CALLS</th>
+            <th colspan="7" class="head-calls">CALLS</th>
             <th class="head-strike">STRIKE</th>
-            <th colspan="6" class="head-puts">PUTS</th>
+            <th colspan="7" class="head-puts">PUTS</th>
           </tr>
           <tr class="head-cols">
-            <!-- CALLS -->
-            <th class="col-trend call-side" title="Bullish if COI &gt; 0, Bearish if COI &lt; 0">Trend</th>
-            <th class="col-oip call-side" title="OI Change % = Change in OI ÷ Previous OI × 100">OI Chg%</th>
-            <th class="col-coi call-side" title="Change in Open Interest since previous close">OI Chng</th>
-            <th class="col-oi call-side" title="Total Open Interest (no. of open contracts)">OI</th>
-            <th class="col-ltp call-side" title="Last Traded Price">LTP</th>
-            <th class="col-iv call-side" title="Imbalance vs Put = (Call COI - Put COI) / Put COI × 100">Imb%</th>
+            <!-- CALLS (outer → inner) -->
+            <th class="col-trend call-side" title="Bullish if COI &gt; 0">Trend</th>
+            <th class="col-oip   call-side" title="OI Change % = COI ÷ Prev OI × 100">OI Chg%</th>
+            <th class="col-coi   call-side" title="Change in Open Interest">OI Chng</th>
+            <th class="col-imb   call-side" title="Imbalance vs Put COI">Imb%</th>
+            <th class="col-oi    call-side" title="Total Open Interest">OI</th>
+            <th class="col-ltp   call-side" title="Last Traded Price">LTP</th>
+            <th class="col-vwap  call-side" title="VWAP — volume-weighted avg price (rolling 10-period)">VWAP</th>
             <!-- STRIKE -->
             <th class="col-sp">Price</th>
-            <!-- PUTS -->
-            <th class="col-iv put-side" title="Imbalance vs Call = (Put COI - Call COI) / Call COI × 100">Imb%</th>
-            <th class="col-ltp put-side" title="Last Traded Price">LTP</th>
-            <th class="col-oi put-side" title="Total Open Interest">OI</th>
-            <th class="col-coi put-side" title="Change in Open Interest since previous close">OI Chng</th>
-            <th class="col-oip put-side" title="OI Change % = Change in OI ÷ Previous OI × 100">OI Chg%</th>
-            <th class="col-trend put-side" title="Bullish if COI &gt; 0, Bearish if COI &lt; 0">Trend</th>
+            <!-- PUTS (inner → outer) -->
+            <th class="col-vwap  put-side" title="VWAP — rolling 10-period average">VWAP</th>
+            <th class="col-ltp   put-side" title="Last Traded Price">LTP</th>
+            <th class="col-oi    put-side" title="Total Open Interest">OI</th>
+            <th class="col-imb   put-side" title="Imbalance vs Call COI">Imb%</th>
+            <th class="col-coi   put-side" title="Change in Open Interest">OI Chng</th>
+            <th class="col-oip   put-side" title="OI Change %">OI Chg%</th>
+            <th class="col-trend put-side" title="Bullish if COI &gt; 0">Trend</th>
           </tr>
         </thead>
         <tbody id="chain-body">
@@ -122,11 +135,13 @@
           <tr class="foot-row" id="foot-row">
             <td></td><td></td>
             <td class="foot-val call-side" id="foot-call-coi">—</td>
+            <td></td>
             <td class="foot-val call-side" id="foot-call-oi">—</td>
             <td></td><td></td>
             <td class="foot-label">TOTAL</td>
             <td></td><td></td>
             <td class="foot-val put-side" id="foot-put-oi">—</td>
+            <td></td>
             <td class="foot-val put-side" id="foot-put-coi">—</td>
             <td></td><td></td>
           </tr>

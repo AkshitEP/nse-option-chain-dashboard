@@ -167,6 +167,25 @@ body {
 .apply-btn:hover { opacity: .88; transform: translateY(-1px); }
 .ctrl-info { font-size: 10px; color: var(--text3); align-self: flex-end; padding-bottom: 2px; }
 
+/* Symbol tabs */
+.symbol-tabs { display: flex; gap: 4px; }
+.sym-tab {
+  padding: 5px 12px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border2);
+  background: var(--bg3); color: var(--text2);
+  font-size: 12px; font-weight: 600; cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.sym-tab:hover  { border-color: var(--purple); color: var(--purple); }
+.sym-tab.active {
+  background: linear-gradient(135deg, #6366f1, #a855f7);
+  border-color: transparent; color: #fff;
+}
+
+/* Vertical divider in controls bar */
+.ctrl-divider { width: 1px; height: 36px; background: var(--border); align-self: flex-end; }
+
+
 /* ── Table Wrapper ───────────────────────────────────────────────── */
 .table-wrapper {
   padding: 14px 20px 0;
@@ -267,7 +286,9 @@ tr.atm-row td.td-strike {
 .num-neu { color: var(--text2); }
 
 /* LTP */
-.ltp-val { color: var(--text); font-weight: 500; }
+.ltp-val  { color: var(--text); font-weight: 500; }
+/* VWAP */
+.vwap-val { color: var(--text2); font-style: italic; font-size: 11px; }
 
 /* Imbalance */
 .imb-pos { color: var(--green); }
