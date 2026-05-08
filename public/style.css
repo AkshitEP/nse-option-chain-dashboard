@@ -387,6 +387,11 @@ tr.atm-row td.td-strike {
 .num-neg { color: var(--red); }
 .num-neu { color: var(--text2); }
 
+/* Prominent columns: PCR and Change in OI */
+.pcr-cell { font-weight: 700; font-size: 13px; letter-spacing: .3px; }
+.coi-cell { font-weight: 700; font-size: 13px; letter-spacing: .2px; }
+
+
 /* LTP */
 .ltp-val  { color: var(--text); font-weight: 500; }
 /* VWAP */

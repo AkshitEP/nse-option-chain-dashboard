@@ -16,9 +16,9 @@ const symState = {
   BANKNIFTY: { data: null, atm: null, expiry: null, expiryDates: [], customStrike: null, N: 4 },
 };
 
-// Rolling LTP history for VWAP per strike+side
-const ltpHistory = {};
-const VWAP_WINDOW = 10;
+// Proper volume-weighted VWAP per strike+side
+const vwapState  = {};   // key -> { hist:[{p,v}], prevVol:number }
+const VWAP_WINDOW = 20;
 
 // ── DOM helpers ─────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -44,12 +44,19 @@ const fmtPCR  = n => n == null || isNaN(n) ? '—' : n.toFixed(2);
 const fmtSpt  = n => n == null ? '—' : n.toLocaleString('en-IN',
   { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-function updateVwap(key, ltp) {
+function updateVwap(key, ltp, totalVol) {
   if (!ltp || ltp <= 0) return null;
-  if (!ltpHistory[key]) ltpHistory[key] = [];
-  ltpHistory[key].push(ltp);
-  if (ltpHistory[key].length > VWAP_WINDOW) ltpHistory[key].shift();
-  return ltpHistory[key].reduce((a, b) => a + b, 0) / ltpHistory[key].length;
+  if (!vwapState[key]) vwapState[key] = { hist: [], prevVol: 0 };
+  const s = vwapState[key];
+  // Delta volume since last poll; first poll: use totalVol itself
+  const rawDelta = (totalVol || 0) - s.prevVol;
+  const vol      = rawDelta > 0 ? rawDelta : (totalVol > 0 ? totalVol : 1);
+  s.prevVol = totalVol || 0;
+  s.hist.push({ p: ltp, v: vol });
+  if (s.hist.length > VWAP_WINDOW) s.hist.shift();
+  const sumPV = s.hist.reduce((a, b) => a + b.p * b.v, 0);
+  const sumV  = s.hist.reduce((a, b) => a + b.v,       0);
+  return sumV > 0 ? sumPV / sumV : null;
 }
 
 function heatLevel(val, max) {
@@ -359,8 +366,10 @@ function renderTable(sym, data) {
     const cCOI = ce.changeinOpenInterest || 0,   pCOI = pe.changeinOpenInterest || 0;
     const cLTP = ce.lastPrice || 0,              pLTP = pe.lastPrice || 0;
 
-    const cVWAP = updateVwap(`${sym}-${sp}-CE`, cLTP);
-    const pVWAP = updateVwap(`${sym}-${sp}-PE`, pLTP);
+    const cVol  = ce.totalTradedVolume || 0;
+    const pVol  = pe.totalTradedVolume || 0;
+    const cVWAP = updateVwap(`${sym}-${sp}-CE`, cLTP, cVol);
+    const pVWAP = updateVwap(`${sym}-${sp}-PE`, pLTP, pVol);
 
     const pcrStrike = cOI > 0 ? pOI / cOI : null;
     const pcrClass  = pcrStrike == null ? 'num-neu'
@@ -384,15 +393,15 @@ function renderTable(sym, data) {
     html += `<tr${isATM ? ' class="atm-row"' : ''}>
       <td class="call-side vwap-val">${cVWAP ? fmtLTP(cVWAP) : '—'}</td>
       <td class="call-side ltp-val">${fmtLTP(cLTP)}</td>
-      <td class="call-side ${pcrClass}">${pcrStrike != null ? fmtPCR(pcrStrike) : '—'}</td>
+      <td class="call-side pcr-cell ${pcrClass}">${pcrStrike != null ? fmtPCR(pcrStrike) : '—'}</td>
       <td class="call-side heat-call-${hCOI}">${fmtNum(cOI)}</td>
       <td class="call-side ${cImb != null ? numClass(cImb) : 'num-neu'}">${cImb != null ? fmtPct(cImb) : '—'}</td>
-      <td class="call-side heat-call-${hCCOI} ${numClass(cCOI)}">${fmtNum(cCOI)}</td>
+      <td class="call-side coi-cell heat-call-${hCCOI} ${numClass(cCOI)}">${fmtNum(cCOI)}</td>
       <td class="td-strike" style="background:${getPcrBg(pcrStrike)}">${sp.toLocaleString('en-IN')}${srTag}</td>
-      <td class="put-side heat-put-${hPCOI} ${numClass(pCOI)}">${fmtNum(pCOI)}</td>
+      <td class="put-side coi-cell heat-put-${hPCOI} ${numClass(pCOI)}">${fmtNum(pCOI)}</td>
       <td class="put-side ${pImb != null ? numClass(pImb) : 'num-neu'}">${pImb != null ? fmtPct(pImb) : '—'}</td>
       <td class="put-side heat-put-${hPOI}">${fmtNum(pOI)}</td>
-      <td class="put-side ${pcrClass}">${pcrStrike != null ? fmtPCR(pcrStrike) : '—'}</td>
+      <td class="put-side pcr-cell ${pcrClass}">${pcrStrike != null ? fmtPCR(pcrStrike) : '—'}</td>
       <td class="put-side ltp-val">${fmtLTP(pLTP)}</td>
       <td class="put-side vwap-val">${pVWAP ? fmtLTP(pVWAP) : '—'}</td>
     </tr>`;
