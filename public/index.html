@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>NSE Option Chain — Live Dashboard</title>
-  <meta name="description" content="Live NSE NIFTY Option Chain with COI heat maps, PCR, ITM/OTM analysis and real-time market sentiment." />
+  <meta name="description" content="Live NSE NIFTY & BANKNIFTY Option Chain with heat maps, PCR, ITM/OTM analysis." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
@@ -20,25 +20,37 @@
       </div>
     </div>
 
-    <div class="market-info">
-      <div class="market-stat">
-        <span class="ms-label">NIFTY SPOT</span>
-        <span class="ms-value" id="spot-price">—</span>
+    <!-- NIFTY Stats -->
+    <div class="sym-panel" id="panel-NIFTY">
+      <span class="sym-panel-label">NIFTY</span>
+      <div class="sym-panel-stats">
+        <div class="market-stat"><span class="ms-label">SPOT</span><span class="ms-value" id="nifty-spot">—</span></div>
+        <div class="divider-v"></div>
+        <div class="market-stat"><span class="ms-label">OPEN</span><span class="ms-value atm" id="nifty-atm">—</span></div>
+        <div class="divider-v"></div>
+        <div class="market-stat"><span class="ms-label">PCR</span><span class="ms-value" id="nifty-pcr">—</span></div>
+        <div class="divider-v"></div>
+        <div class="market-stat"><span class="ms-label">IMBALANCE</span><span class="ms-value" id="nifty-imb">—</span></div>
+        <div class="divider-v"></div>
+        <div class="market-stat"><span class="ms-label">EXPIRY</span><span class="ms-value" id="nifty-expiry">—</span></div>
       </div>
-      <div class="divider-v"></div>
-      <div class="market-stat">
-        <span class="ms-label">ATM STRIKE</span>
-        <span class="ms-value atm" id="atm-display">—</span>
-      </div>
-      <div class="divider-v"></div>
-      <div class="market-stat">
-        <span class="ms-label">PCR</span>
-        <span class="ms-value" id="pcr-value">—</span>
-      </div>
-      <div class="divider-v"></div>
-      <div class="market-stat">
-        <span class="ms-label">EXPIRY</span>
-        <span class="ms-value" id="expiry-label">—</span>
+    </div>
+
+    <div class="divider-v header-divider"></div>
+
+    <!-- BANKNIFTY Stats -->
+    <div class="sym-panel" id="panel-BANKNIFTY">
+      <span class="sym-panel-label">BANKNIFTY</span>
+      <div class="sym-panel-stats">
+        <div class="market-stat"><span class="ms-label">SPOT</span><span class="ms-value" id="bnk-spot">—</span></div>
+        <div class="divider-v"></div>
+        <div class="market-stat"><span class="ms-label">OPEN</span><span class="ms-value atm" id="bnk-atm">—</span></div>
+        <div class="divider-v"></div>
+        <div class="market-stat"><span class="ms-label">PCR</span><span class="ms-value" id="bnk-pcr">—</span></div>
+        <div class="divider-v"></div>
+        <div class="market-stat"><span class="ms-label">IMBALANCE</span><span class="ms-value" id="bnk-imb">—</span></div>
+        <div class="divider-v"></div>
+        <div class="market-stat"><span class="ms-label">EXPIRY</span><span class="ms-value" id="bnk-expiry">—</span></div>
       </div>
     </div>
 
@@ -58,23 +70,8 @@
     </div>
   </header>
 
-  <!-- ── Controls Bar ───────────────────────────────────────────── -->
+  <!-- ── Shared Controls Bar ─────────────────────────────────────── -->
   <div class="controls-bar">
-    <div class="ctrl-group">
-      <label class="ctrl-label">SYMBOL</label>
-      <div class="symbol-tabs">
-        <button class="sym-tab active" id="sym-NIFTY"     data-symbol="NIFTY">NIFTY</button>
-        <button class="sym-tab"        id="sym-BANKNIFTY" data-symbol="BANKNIFTY">BANKNIFTY</button>
-        <button class="sym-tab"        id="sym-FINNIFTY"  data-symbol="FINNIFTY">FINNIFTY</button>
-      </div>
-    </div>
-
-    <div class="ctrl-divider"></div>
-
-    <div class="ctrl-group">
-      <label class="ctrl-label">STRIKE PRICE</label>
-      <input type="number" id="strike-input" class="ctrl-input" placeholder="Auto (ATM)" step="50" />
-    </div>
     <div class="ctrl-group">
       <label class="ctrl-label">STRIKES ± N</label>
       <div class="stepper">
@@ -83,115 +80,151 @@
         <button class="step-btn" id="n-up">+</button>
       </div>
     </div>
-    <button class="apply-btn" id="apply-btn">Apply</button>
-    <div class="ctrl-info" id="row-count-label">Rows = 2N+1</div>
-
-    <div class="expiry-selector" id="expiry-selector" style="display:none;">
-      <label class="ctrl-label">EXPIRY</label>
-      <select id="expiry-select" class="ctrl-select"></select>
-    </div>
+    <div class="ctrl-info" id="row-count-label">Rows = 9</div>
+    <div id="conn-error" class="ctrl-info" style="color:var(--red);display:none;"></div>
   </div>
 
-  <!-- ── Main Option Chain Table ────────────────────────────────── -->
-  <div class="table-wrapper">
-    <div class="table-title-row">
-      <span class="table-title" id="table-title">Option Chain — 9 Strikes Around ATM</span>
-      <span class="last-update">Last updated: <span id="last-update">—</span></span>
+  <!-- ════════════ NIFTY SECTION ════════════════════════════════════ -->
+  <div class="chain-section" id="section-NIFTY">
+    <div class="section-header">
+      <div class="section-title-group">
+        <span class="section-badge nifty-badge">NIFTY</span>
+        <span class="section-subtitle" id="nifty-table-title">Loading…</span>
+      </div>
+      <div class="section-controls">
+        <div class="expiry-selector" id="nifty-expiry-sel" style="display:none;">
+          <label class="ctrl-label">EXPIRY</label>
+          <select id="nifty-expiry-select" class="ctrl-select"></select>
+        </div>
+        <span class="last-update">Updated: <span id="nifty-last-update">—</span></span>
+      </div>
     </div>
 
     <div class="table-scroll">
-      <table class="chain-table" id="chain-table">
+      <table class="chain-table">
         <thead>
           <tr class="head-group">
-            <th colspan="7" class="head-calls">CALLS</th>
+            <th colspan="6" class="head-calls">CALLS</th>
             <th class="head-strike">STRIKE</th>
-            <th colspan="7" class="head-puts">PUTS</th>
+            <th colspan="6" class="head-puts">PUTS</th>
           </tr>
           <tr class="head-cols">
-            <!-- CALLS (outer → inner) -->
-            <th class="col-trend call-side" title="Bullish if COI &gt; 0">Trend</th>
-            <th class="col-oip   call-side" title="OI Change % = COI ÷ Prev OI × 100">OI Chg%</th>
-            <th class="col-coi   call-side" title="Change in Open Interest">OI Chng</th>
-            <th class="col-imb   call-side" title="Imbalance vs Put COI">Imb%</th>
-            <th class="col-oi    call-side" title="Total Open Interest">OI</th>
-            <th class="col-ltp   call-side" title="Last Traded Price">LTP</th>
-            <th class="col-vwap  call-side" title="VWAP — volume-weighted avg price (rolling 10-period)">VWAP</th>
-            <!-- STRIKE -->
+            <th class="col-vwap call-side" title="Rolling 10-period VWAP">VWAP</th>
+            <th class="col-ltp  call-side" title="Last Traded Price">LTP</th>
+            <th class="col-pcr  call-side" title="Per-strike PCR = Put OI ÷ Call OI">PCR</th>
+            <th class="col-oi   call-side" title="Total Open Interest">OI</th>
+            <th class="col-imb  call-side" title="Imbalance vs Put COI">Imb%</th>
+            <th class="col-coi  call-side" title="Change in Open Interest">OI Chng</th>
             <th class="col-sp">Price</th>
-            <!-- PUTS (inner → outer) -->
-            <th class="col-vwap  put-side" title="VWAP — rolling 10-period average">VWAP</th>
-            <th class="col-ltp   put-side" title="Last Traded Price">LTP</th>
-            <th class="col-oi    put-side" title="Total Open Interest">OI</th>
-            <th class="col-imb   put-side" title="Imbalance vs Call COI">Imb%</th>
-            <th class="col-coi   put-side" title="Change in Open Interest">OI Chng</th>
-            <th class="col-oip   put-side" title="OI Change %">OI Chg%</th>
-            <th class="col-trend put-side" title="Bullish if COI &gt; 0">Trend</th>
+            <th class="col-coi  put-side" title="Change in Open Interest">OI Chng</th>
+            <th class="col-imb  put-side" title="Imbalance vs Call COI">Imb%</th>
+            <th class="col-oi   put-side" title="Total Open Interest">OI</th>
+            <th class="col-pcr  put-side" title="Per-strike PCR = Put OI ÷ Call OI">PCR</th>
+            <th class="col-ltp  put-side" title="Last Traded Price">LTP</th>
+            <th class="col-vwap put-side" title="Rolling 10-period VWAP">VWAP</th>
           </tr>
         </thead>
-        <tbody id="chain-body">
-          <tr><td colspan="13" class="loading-row">Loading data...</td></tr>
+        <tbody id="nifty-chain-body">
+          <tr><td colspan="13" class="loading-row">Loading NIFTY data…</td></tr>
         </tbody>
         <tfoot>
-          <tr class="foot-row" id="foot-row">
-            <td></td><td></td>
-            <td class="foot-val call-side" id="foot-call-coi">—</td>
+          <tr class="foot-row">
+            <td></td><td></td><td></td>
+            <td class="foot-val call-side" id="nifty-foot-call-oi">—</td>
             <td></td>
-            <td class="foot-val call-side" id="foot-call-oi">—</td>
-            <td></td><td></td>
+            <td class="foot-val call-side" id="nifty-foot-call-coi">—</td>
             <td class="foot-label">TOTAL</td>
-            <td></td><td></td>
-            <td class="foot-val put-side" id="foot-put-oi">—</td>
+            <td class="foot-val put-side" id="nifty-foot-put-coi">—</td>
             <td></td>
-            <td class="foot-val put-side" id="foot-put-coi">—</td>
-            <td></td><td></td>
+            <td class="foot-val put-side" id="nifty-foot-put-oi">—</td>
+            <td></td><td></td><td></td>
           </tr>
         </tfoot>
       </table>
     </div>
+
+    <!-- Compact stat bar -->
+    <div class="stat-bar" id="nifty-stat-bar">
+      <div class="sb-item"><span class="sb-label">Call OI</span><span class="sb-val green" id="nifty-sb-coi">—</span></div>
+      <div class="sb-item"><span class="sb-label">Put OI</span><span class="sb-val red"   id="nifty-sb-poi">—</span></div>
+      <div class="sb-item"><span class="sb-label">PCR</span><span class="sb-val"          id="nifty-sb-pcr">—</span></div>
+      <div class="sb-item"><span class="sb-label">Call COI</span><span class="sb-val"     id="nifty-sb-ccoi">—</span></div>
+      <div class="sb-item"><span class="sb-label">Put COI</span><span class="sb-val"      id="nifty-sb-pcoi">—</span></div>
+      <div class="sb-item"><span class="sb-label">Imbalance</span><span class="sb-val"    id="nifty-sb-imb">—</span></div>
+      <div class="sb-item"><span class="sb-label">Sentiment</span><span class="sb-val"    id="nifty-sb-sent">—</span></div>
+      <div class="sb-item"><span class="sb-label">Max Pain</span><span class="sb-val"     id="nifty-sb-mp">—</span></div>
+    </div>
   </div>
 
-  <!-- ── Stats Panels ───────────────────────────────────────────── -->
-  <div class="stats-grid">
-    <div class="stat-panel">
-      <div class="sp-title">TOTALS</div>
-      <table class="sp-table">
-        <tr><td class="sp-label">Call OI</td><td class="sp-val green" id="st-call-oi">—</td></tr>
-        <tr><td class="sp-label">Put OI</td><td class="sp-val red" id="st-put-oi">—</td></tr>
-        <tr><td class="sp-label">Total OI</td><td class="sp-val" id="st-total-oi">—</td></tr>
-        <tr><td class="sp-label">Call OI Chng</td><td class="sp-val" id="st-call-coi">—</td></tr>
-        <tr><td class="sp-label">Put OI Chng</td><td class="sp-val" id="st-put-coi">—</td></tr>
+  <!-- ════════════ BANKNIFTY SECTION ════════════════════════════════ -->
+  <div class="chain-section" id="section-BANKNIFTY">
+    <div class="section-header">
+      <div class="section-title-group">
+        <span class="section-badge bnk-badge">BANKNIFTY</span>
+        <span class="section-subtitle" id="bnk-table-title">Loading…</span>
+      </div>
+      <div class="section-controls">
+        <div class="expiry-selector" id="bnk-expiry-sel" style="display:none;">
+          <label class="ctrl-label">EXPIRY</label>
+          <select id="bnk-expiry-select" class="ctrl-select"></select>
+        </div>
+        <span class="last-update">Updated: <span id="bnk-last-update">—</span></span>
+      </div>
+    </div>
+
+    <div class="table-scroll">
+      <table class="chain-table">
+        <thead>
+          <tr class="head-group">
+            <th colspan="6" class="head-calls">CALLS</th>
+            <th class="head-strike">STRIKE</th>
+            <th colspan="6" class="head-puts">PUTS</th>
+          </tr>
+          <tr class="head-cols">
+            <th class="col-vwap call-side" title="Rolling 10-period VWAP">VWAP</th>
+            <th class="col-ltp  call-side" title="Last Traded Price">LTP</th>
+            <th class="col-pcr  call-side" title="Per-strike PCR = Put OI ÷ Call OI">PCR</th>
+            <th class="col-oi   call-side" title="Total Open Interest">OI</th>
+            <th class="col-imb  call-side" title="Imbalance vs Put COI">Imb%</th>
+            <th class="col-coi  call-side" title="Change in Open Interest">OI Chng</th>
+            <th class="col-sp">Price</th>
+            <th class="col-coi  put-side" title="Change in Open Interest">OI Chng</th>
+            <th class="col-imb  put-side" title="Imbalance vs Call COI">Imb%</th>
+            <th class="col-oi   put-side" title="Total Open Interest">OI</th>
+            <th class="col-pcr  put-side" title="Per-strike PCR = Put OI ÷ Call OI">PCR</th>
+            <th class="col-ltp  put-side" title="Last Traded Price">LTP</th>
+            <th class="col-vwap put-side" title="Rolling 10-period VWAP">VWAP</th>
+          </tr>
+        </thead>
+        <tbody id="bnk-chain-body">
+          <tr><td colspan="13" class="loading-row">Loading BANKNIFTY data…</td></tr>
+        </tbody>
+        <tfoot>
+          <tr class="foot-row">
+            <td></td><td></td><td></td>
+            <td class="foot-val call-side" id="bnk-foot-call-oi">—</td>
+            <td></td>
+            <td class="foot-val call-side" id="bnk-foot-call-coi">—</td>
+            <td class="foot-label">TOTAL</td>
+            <td class="foot-val put-side" id="bnk-foot-put-coi">—</td>
+            <td></td>
+            <td class="foot-val put-side" id="bnk-foot-put-oi">—</td>
+            <td></td><td></td><td></td>
+          </tr>
+        </tfoot>
       </table>
     </div>
 
-    <div class="stat-panel">
-      <div class="sp-title">PCR &amp; SENTIMENT</div>
-      <table class="sp-table">
-        <tr><td class="sp-label">PCR (OI)</td><td class="sp-val" id="st-pcr">—</td></tr>
-        <tr><td class="sp-label">PCR (COI)</td><td class="sp-val" id="st-pcr-coi">—</td></tr>
-        <tr><td class="sp-label">Imbalance</td><td class="sp-val" id="st-imbalance">—</td></tr>
-        <tr><td class="sp-label">Sentiment</td><td class="sp-val" id="st-sentiment">—</td></tr>
-        <tr><td class="sp-label">Max Pain</td><td class="sp-val" id="st-maxpain">—</td></tr>
-      </table>
-    </div>
-
-    <div class="stat-panel">
-      <div class="sp-title">ITM (In The Money)</div>
-      <table class="sp-table">
-        <tr><th class="sp-head"></th><th class="sp-head">Calls</th><th class="sp-head">Puts</th></tr>
-        <tr><td class="sp-label">OI</td><td class="sp-val green" id="st-itm-call-oi">—</td><td class="sp-val red" id="st-itm-put-oi">—</td></tr>
-        <tr><td class="sp-label">OI Chng</td><td class="sp-val" id="st-itm-call-coi">—</td><td class="sp-val" id="st-itm-put-coi">—</td></tr>
-        <tr><td class="sp-label">PCR OI</td><td class="sp-val" colspan="2" id="st-itm-pcr">—</td></tr>
-      </table>
-    </div>
-
-    <div class="stat-panel">
-      <div class="sp-title">OTM (Out of The Money)</div>
-      <table class="sp-table">
-        <tr><th class="sp-head"></th><th class="sp-head">Calls</th><th class="sp-head">Puts</th></tr>
-        <tr><td class="sp-label">OI</td><td class="sp-val green" id="st-otm-call-oi">—</td><td class="sp-val red" id="st-otm-put-oi">—</td></tr>
-        <tr><td class="sp-label">OI Chng</td><td class="sp-val" id="st-otm-call-coi">—</td><td class="sp-val" id="st-otm-put-coi">—</td></tr>
-        <tr><td class="sp-label">PCR OI</td><td class="sp-val" colspan="2" id="st-otm-pcr">—</td></tr>
-      </table>
+    <!-- Compact stat bar -->
+    <div class="stat-bar" id="bnk-stat-bar">
+      <div class="sb-item"><span class="sb-label">Call OI</span><span class="sb-val green" id="bnk-sb-coi">—</span></div>
+      <div class="sb-item"><span class="sb-label">Put OI</span><span class="sb-val red"   id="bnk-sb-poi">—</span></div>
+      <div class="sb-item"><span class="sb-label">PCR</span><span class="sb-val"          id="bnk-sb-pcr">—</span></div>
+      <div class="sb-item"><span class="sb-label">Call COI</span><span class="sb-val"     id="bnk-sb-ccoi">—</span></div>
+      <div class="sb-item"><span class="sb-label">Put COI</span><span class="sb-val"      id="bnk-sb-pcoi">—</span></div>
+      <div class="sb-item"><span class="sb-label">Imbalance</span><span class="sb-val"    id="bnk-sb-imb">—</span></div>
+      <div class="sb-item"><span class="sb-label">Sentiment</span><span class="sb-val"    id="bnk-sb-sent">—</span></div>
+      <div class="sb-item"><span class="sb-label">Max Pain</span><span class="sb-val"     id="bnk-sb-mp">—</span></div>
     </div>
   </div>
 
@@ -199,7 +232,7 @@
   <div class="error-banner" id="error-banner" style="display:none;">
     <span class="err-icon">⚠</span>
     <span class="err-msg" id="error-message"></span>
-    <button class="retry-btn" onclick="fetchData()">Retry</button>
+    <button class="retry-btn" onclick="fetchBoth()">Retry</button>
   </div>
 
   <footer class="page-footer">

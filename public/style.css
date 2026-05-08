@@ -82,6 +82,23 @@ body {
 .brand-name { font-weight: 700; font-size: 15px; color: var(--text); display: block; }
 .brand-sub  { font-size: 9px; font-weight: 600; letter-spacing: 1.5px; color: var(--text3); display: block; }
 
+.sym-panel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+.sym-panel-label {
+  font-size: 10px; font-weight: 800; letter-spacing: 1.5px;
+  color: var(--purple); writing-mode: vertical-lr;
+  text-orientation: mixed; transform: rotate(180deg);
+  flex-shrink: 0;
+}
+.sym-panel-stats { display: flex; align-items: center; gap: 0; flex: 1; }
+
+.header-divider { height: 52px; }
+
 .market-info { display: flex; align-items: center; gap: 0; flex: 1; }
 .market-stat { padding: 0 18px; }
 .market-stat:first-child { padding-left: 0; }
@@ -186,7 +203,53 @@ body {
 .ctrl-divider { width: 1px; height: 36px; background: var(--border); align-self: flex-end; }
 
 
-/* ── Table Wrapper ───────────────────────────────────────────────── */
+/* ── Chain Sections (stacked NIFTY + BANKNIFTY) ─────────────────── */
+.chain-section {
+  margin: 12px 20px 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--bg2);
+}
+
+.section-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 14px;
+  background: var(--bg3);
+  border-bottom: 1px solid var(--border);
+  gap: 16px;
+}
+.section-title-group { display: flex; align-items: center; gap: 10px; }
+.section-badge {
+  padding: 3px 10px; border-radius: 4px;
+  font-size: 11px; font-weight: 800; letter-spacing: 1px;
+  color: #fff;
+}
+.nifty-badge { background: linear-gradient(135deg, #6366f1, #8b5cf6); }
+.bnk-badge   { background: linear-gradient(135deg, #0891b2, #06b6d4); }
+.section-subtitle { font-size: 12px; color: var(--text2); }
+
+.section-controls { display: flex; align-items: center; gap: 14px; }
+.last-update { font-size: 11px; color: var(--text3); }
+
+/* ── Stat Bar (compact, one line per section) ────────────────────── */
+.stat-bar {
+  display: flex; flex-wrap: wrap; gap: 0;
+  border-top: 1px solid var(--border);
+  background: var(--bg3);
+}
+.sb-item {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 14px;
+  border-right: 1px solid var(--border);
+}
+.sb-item:last-child { border-right: none; }
+.sb-label { font-size: 10px; font-weight: 600; color: var(--text3); letter-spacing: .5px; }
+.sb-val   { font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--text); }
+.sb-val.green { color: var(--green); }
+.sb-val.red   { color: var(--red);   }
+
+/* ── Table Wrapper (keep for table-scroll) ───────────────────────── */
 .table-wrapper {
   padding: 14px 20px 0;
   flex: 1;
@@ -196,9 +259,12 @@ body {
   margin-bottom: 10px;
 }
 .table-title { font-size: 14px; font-weight: 600; color: var(--text); }
+
 .last-update  { font-size: 11px; color: var(--text3); }
 
 .table-scroll { overflow-x: auto; border-radius: var(--radius); border: 1px solid var(--border); }
+.chain-section .table-scroll { border: none; border-radius: 0; }
+
 
 .chain-table {
   width: 100%; border-collapse: collapse;
@@ -443,7 +509,7 @@ tr.atm-row td.td-strike {
 /* ── Responsive ─────────────────────────────────────────────────── */
 @media (max-width: 900px) {
   .stats-grid { grid-template-columns: 1fr 1fr; }
-  .market-info { display: none; }
+  .sym-panel, .header-divider { display: none; }
 }
 @media (max-width: 600px) {
   .stats-grid { grid-template-columns: 1fr; }
