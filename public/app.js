@@ -12,8 +12,8 @@ let timerInterval = null;
 
 // Per-symbol state
 const symState = {
-  NIFTY:     { data: null, atm: null, expiry: null, expiryDates: [] },
-  BANKNIFTY: { data: null, atm: null, expiry: null, expiryDates: [] },
+  NIFTY:     { data: null, atm: null, expiry: null, expiryDates: [], customStrike: null },
+  BANKNIFTY: { data: null, atm: null, expiry: null, expiryDates: [], customStrike: null },
 };
 
 // Rolling LTP history for VWAP per strike+side
@@ -96,12 +96,23 @@ els.nUp.addEventListener('click',   () => { N = Math.min(20, N + 1); els.nValue.
 function updateRowLabel() { els.rowCountLabel.textContent = `Rows = ${2 * N + 1}`; }
 updateRowLabel();
 
-// Per-symbol expiry selectors
+// Per-symbol expiry + strike selectors
 SYMBOLS.forEach(sym => {
   const p = prefix(sym);
+
+  // Expiry
   const sel = $(`${p}-expiry-select`);
   if (sel) sel.addEventListener('change', () => {
     symState[sym].expiry = sel.value || null;
+    if (symState[sym].data) renderTable(sym, symState[sym].data);
+  });
+
+  // Custom strike
+  const strikeInput = $(`${p}-strike-input`);
+  if (strikeInput) strikeInput.addEventListener('change', () => {
+    const v = parseFloat(strikeInput.value);
+    const step = sym === 'BANKNIFTY' ? 100 : 50;
+    symState[sym].customStrike = isNaN(v) ? null : Math.round(v / step) * step;
     if (symState[sym].data) renderTable(sym, symState[sym].data);
   });
 });
@@ -226,7 +237,7 @@ function renderTable(sym, data) {
     return !expiry || d === expiry || d.includes(expiry);
   });
   const useRows = (fRows.length ? fRows : rows).sort((a, b) => a.strikePrice - b.strikePrice);
-  const atm     = symState[sym].atm || findATM(useRows, spot);
+  const atm     = symState[sym].customStrike || symState[sym].atm || findATM(useRows, spot);
   const atmIdx  = useRows.findIndex(r => r.strikePrice === atm);
   const lo      = Math.max(0, atmIdx - N);
   const hi      = Math.min(useRows.length - 1, atmIdx + N);

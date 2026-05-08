@@ -160,7 +160,8 @@ body {
   padding: 5px 10px; font-size: 13px; font-family: var(--font-mono);
   width: 120px; outline: none; transition: border-color .2s;
 }
-.ctrl-input:focus { border-color: var(--purple); }
+.ctrl-input-sm { width: 90px; font-size: 12px; padding: 4px 8px; }
+.ctrl-input:focus, .ctrl-input-sm:focus { border-color: var(--purple); }
 .ctrl-select {
   background: var(--bg3); border: 1px solid var(--border2);
   color: var(--text); border-radius: var(--radius-sm);
