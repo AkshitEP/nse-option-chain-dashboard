@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>NSE Option Chain — Live Dashboard</title>
-  <meta name="description" content="Live NSE NIFTY & BANKNIFTY Option Chain with heat maps, PCR, ITM/OTM analysis." />
+  <meta name="description" content="Live NSE NIFTY &amp; BANKNIFTY Option Chain with heat maps, PCR, ITM/OTM analysis." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
@@ -70,18 +70,6 @@
     </div>
   </header>
 
-  <!-- ── Shared Controls Bar ─────────────────────────────────────── -->
-  <div class="controls-bar">
-    <span class="ctrl-bar-label">STRIKES AROUND ATM</span>
-    <div class="stepper">
-      <button class="step-btn" id="n-down">−</button>
-      <span class="step-val" id="n-value">4</span>
-      <button class="step-btn" id="n-up">+</button>
-    </div>
-    <div class="ctrl-info" id="row-count-label">Rows = 9</div>
-    <div id="conn-error" class="ctrl-info" style="color:var(--red);display:none;"></div>
-  </div>
-
   <!-- ════════════ NIFTY SECTION ════════════════════════════════════ -->
   <div class="chain-section" id="section-NIFTY">
     <div class="section-header">
@@ -113,6 +101,29 @@
         <span class="last-update">Updated: <span id="nifty-last-update">—</span></span>
       </div>
     </div>
+
+    <!-- charts-area commented out
+    <div class="charts-area">
+      <div class="chart-panel">
+        <div class="panel-title-bar">
+          <span class="panel-title">COI — Lesser Side per Strike</span>
+          <div class="chart-sr-group">
+            <span class="chart-support" id="nifty-chart-support">SUP: —</span>
+            <span class="chart-resist"  id="nifty-chart-resist">RES: —</span>
+          </div>
+        </div>
+        <canvas class="oi-chart" id="nifty-oi-chart"></canvas>
+      </div>
+      <div class="chart-panel chart-placeholder">
+        <div class="panel-title-bar"><span class="panel-title">Panel 2</span></div>
+        <div class="placeholder-body">Tell me what to add here</div>
+      </div>
+      <div class="chart-panel chart-placeholder">
+        <div class="panel-title-bar"><span class="panel-title">Panel 3</span></div>
+        <div class="placeholder-body">Tell me what to add here</div>
+      </div>
+    </div>
+    -->
 
     <div class="table-scroll">
       <table class="chain-table">
@@ -201,6 +212,29 @@
         <span class="last-update">Updated: <span id="bnk-last-update">—</span></span>
       </div>
     </div>
+
+    <!-- charts-area commented out
+    <div class="charts-area">
+      <div class="chart-panel">
+        <div class="panel-title-bar">
+          <span class="panel-title">COI — Lesser Side per Strike</span>
+          <div class="chart-sr-group">
+            <span class="chart-support" id="bnk-chart-support">SUP: —</span>
+            <span class="chart-resist"  id="bnk-chart-resist">RES: —</span>
+          </div>
+        </div>
+        <canvas class="oi-chart" id="bnk-oi-chart"></canvas>
+      </div>
+      <div class="chart-panel chart-placeholder">
+        <div class="panel-title-bar"><span class="panel-title">Panel 2</span></div>
+        <div class="placeholder-body">Tell me what to add here</div>
+      </div>
+      <div class="chart-panel chart-placeholder">
+        <div class="panel-title-bar"><span class="panel-title">Panel 3</span></div>
+        <div class="placeholder-body">Tell me what to add here</div>
+      </div>
+    </div>
+    -->
 
     <div class="table-scroll">
       <table class="chain-table">

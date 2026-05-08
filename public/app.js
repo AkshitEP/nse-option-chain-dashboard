@@ -60,6 +60,16 @@ function heatLevel(val, max) {
 
 const numClass = v => v > 0 ? 'num-pos' : v < 0 ? 'num-neg' : 'num-neu';
 
+// Per-strike PCR → rgba background for strike cell
+function getPcrBg(pcr) {
+  if (pcr == null || isNaN(pcr)) return 'transparent';
+  if (pcr > 2)    return 'rgba(21,128,61,.30)';
+  if (pcr > 1.25) return 'rgba(34,197,94,.20)';
+  if (pcr >= 0.75) return 'transparent';
+  if (pcr >= 0.5) return 'rgba(239,68,68,.20)';
+  return                 'rgba(153,27,27,.32)';
+}
+
 // ── PCR Phase ──────────────────────────────────────────────────
 function getPcrPhase(pcr) {
   if (pcr == null || isNaN(pcr))
@@ -331,6 +341,14 @@ function renderTable(sym, data) {
   $(`${p}-table-title`).textContent =
     `${vis.length} strikes · ATM ${atm?.toLocaleString('en-IN')} · Spot ${fmtSpt(spot)}`;
 
+  // ── Support / Resistance (highest OI per side in visible rows) ──
+  let maxCOI_sr = 0, maxPOI_sr = 0, resistStrike = null, supportStrike = null;
+  vis.forEach(r => {
+    const cOI = r.CE?.openInterest || 0, pOI = r.PE?.openInterest || 0;
+    if (cOI > maxCOI_sr) { maxCOI_sr = cOI; resistStrike  = r.strikePrice; }
+    if (pOI > maxPOI_sr) { maxPOI_sr = pOI; supportStrike = r.strikePrice; }
+  });
+
   // Build rows
   let html = '';
   vis.forEach(r => {
@@ -357,6 +375,12 @@ function renderTable(sym, data) {
     const hCCOI = heatLevel(cCOI, maxCallCOI);
     const hPCOI = heatLevel(pCOI, maxPutCOI);
 
+    const srTag = sp === supportStrike
+      ? ' <span class="sr-tag sup">SUP</span>'
+      : sp === resistStrike
+      ? ' <span class="sr-tag res">RES</span>'
+      : '';
+
     html += `<tr${isATM ? ' class="atm-row"' : ''}>
       <td class="call-side vwap-val">${cVWAP ? fmtLTP(cVWAP) : '—'}</td>
       <td class="call-side ltp-val">${fmtLTP(cLTP)}</td>
@@ -364,7 +388,7 @@ function renderTable(sym, data) {
       <td class="call-side heat-call-${hCOI}">${fmtNum(cOI)}</td>
       <td class="call-side ${cImb != null ? numClass(cImb) : 'num-neu'}">${cImb != null ? fmtPct(cImb) : '—'}</td>
       <td class="call-side heat-call-${hCCOI} ${numClass(cCOI)}">${fmtNum(cCOI)}</td>
-      <td class="td-strike">${sp.toLocaleString('en-IN')}</td>
+      <td class="td-strike" style="background:${getPcrBg(pcrStrike)}">${sp.toLocaleString('en-IN')}${srTag}</td>
       <td class="put-side heat-put-${hPCOI} ${numClass(pCOI)}">${fmtNum(pCOI)}</td>
       <td class="put-side ${pImb != null ? numClass(pImb) : 'num-neu'}">${pImb != null ? fmtPct(pImb) : '—'}</td>
       <td class="put-side heat-put-${hPOI}">${fmtNum(pOI)}</td>
@@ -386,15 +410,12 @@ function renderTable(sym, data) {
   setFoot(`${p}-foot-put-coi`,  totPCOI, totPCOI >= 0 ? 'var(--put)' : 'var(--red)');
 
   // Stat bar
-  const sentiment = pcr > 1.3 ? 'Bullish 🟢' : pcr < 0.7 ? 'Bearish 🔴'
-                  : pcr > 1   ? 'Mild Bullish' : 'Mild Bearish';
   const setS = (id, val, color) => {
     const el = $(id); if (!el) return;
     el.textContent = val; if (color) el.style.color = color;
   };
   setS(`${p}-sb-coi`,  fmtNum(totCOI));
   setS(`${p}-sb-poi`,  fmtNum(totPOI));
-  // PCR with phase colour
   const pcrSbEl = $(`${p}-sb-pcr`);
   const sbPhase = getPcrPhase(pcr);
   if (pcrSbEl) { pcrSbEl.textContent = fmtPCR(pcr); pcrSbEl.className = `sb-val ${sbPhase.cls}`; }
@@ -404,7 +425,135 @@ function renderTable(sym, data) {
   const sentEl = $(`${p}-sb-sent`);
   if (sentEl) { sentEl.textContent = `${sbPhase.icon} ${sbPhase.label}`; sentEl.className = `sb-val ${sbPhase.cls}`; }
   setS(`${p}-sb-mp`,   mp ? mp.toLocaleString('en-IN') : '—');
+
+  // drawOIChart commented out
+  // drawOIChart(sym, vis, pcr, atm, supportStrike, resistStrike);
 }
+
+// ── Phase → hex for canvas ───────────────────────────────────────────
+const PHASE_HEX = {
+  'strong-bull': '#15803d', 'bull': '#22c55e', 'sideways': '#94a3b8',
+  'bear': '#f87171', 'strong-bear': '#dc2626', 'unknown': '#64748b',
+};
+
+// Horizontal bar with rounded cap on the open end
+function roundedBarH(ctx, x, y, w, h, r, dir) {
+  ctx.beginPath();
+  if (dir === 'right') {
+    ctx.moveTo(x, y); ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x, y + h);
+  } else {
+    ctx.moveTo(x + w, y); ctx.lineTo(x + r, y);
+    ctx.quadraticCurveTo(x, y, x, y + r);
+    ctx.lineTo(x, y + h - r);
+    ctx.quadraticCurveTo(x, y + h, x + r, y + h);
+    ctx.lineTo(x + w, y + h);
+  }
+  ctx.closePath();
+}
+
+function drawOIChart(sym, vis, pcr, atm, supportStrike, resistStrike) {
+  const p      = prefix(sym);
+  const canvas = document.getElementById(`${p}-oi-chart`);
+  if (!canvas) return;
+
+  const phase    = getPcrPhase(pcr);
+  const barColor = PHASE_HEX[phase.phase] || '#94a3b8';
+  const isDark   = document.documentElement.getAttribute('data-theme') !== 'light';
+
+  // Bar data: lesser |COI| side per strike (top-to-bottom = ascending strikes)
+  const bars = vis.map(r => {
+    const cCOI = r.CE?.changeinOpenInterest || 0;
+    const pCOI = r.PE?.changeinOpenInterest || 0;
+    const useCall = Math.abs(cCOI) <= Math.abs(pCOI);
+    return {
+      strike: r.strikePrice,
+      val:    useCall ? cCOI : pCOI,
+      side:   useCall ? 'C' : 'P',
+      isATM:  r.strikePrice === atm,
+      isSup:  r.strikePrice === supportStrike,
+      isRes:  r.strikePrice === resistStrike,
+    };
+  });
+
+  // S/R labels
+  const supEl = $(`${p}-chart-support`);
+  const resEl = $(`${p}-chart-resist`);
+  if (supEl) supEl.textContent = `▲ SUP ${supportStrike?.toLocaleString('en-IN') || '—'}`;
+  if (resEl) resEl.textContent = `▼ RES ${resistStrike?.toLocaleString('en-IN') || '—'}`;
+
+  // HiDPI canvas
+  const dpr    = window.devicePixelRatio || 1;
+  const ROW_H  = 22;   // px per strike row
+  const W      = canvas.offsetWidth || 300;
+  const H      = bars.length * ROW_H + 12;
+  canvas.width  = Math.round(W * dpr);
+  canvas.height = Math.round(H * dpr);
+  canvas.style.height = H + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, W, H);
+
+  const textColor = isDark ? '#9aa0b8' : '#475569';
+  const gridColor = isDark ? '#2a2f40' : '#e2e8f0';
+
+  const PAD    = { top: 6, bottom: 6, left: 46, right: 4 };
+  const chartW = W - PAD.left - PAD.right;
+  const chartH = H - PAD.top  - PAD.bottom;
+  const rowH   = chartH / bars.length;
+  const midX   = PAD.left + chartW / 2;
+  const maxVal = Math.max(...bars.map(b => Math.abs(b.val)), 1);
+
+  // Center vertical line
+  ctx.strokeStyle = gridColor; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(midX, PAD.top); ctx.lineTo(midX, H - PAD.bottom); ctx.stroke();
+
+  bars.forEach((b, i) => {
+    const y    = PAD.top + i * rowH;
+    const cy   = y + rowH / 2;
+    const bW   = (Math.abs(b.val) / maxVal) * (chartW / 2);
+    const isPos = b.val >= 0;
+    const barH  = Math.max(4, rowH * 0.55);
+    const barY  = cy - barH / 2;
+    const r     = Math.min(3, barH / 3);
+
+    // Row background
+    if (b.isATM)      { ctx.fillStyle = 'rgba(245,158,11,.08)'; ctx.fillRect(0, y, W, rowH); }
+    else if (b.isSup) { ctx.fillStyle = 'rgba(34,197,94,.06)';  ctx.fillRect(0, y, W, rowH); }
+    else if (b.isRes) { ctx.fillStyle = 'rgba(239,68,68,.06)';  ctx.fillRect(0, y, W, rowH); }
+
+    // Bar
+    if (bW > 0) {
+      ctx.fillStyle = barColor;
+      if (isPos) roundedBarH(ctx, midX,      barY, bW, barH, r, 'right');
+      else        roundedBarH(ctx, midX - bW, barY, bW, barH, r, 'left');
+      ctx.fill();
+
+      // Side label inside bar
+      if (bW > 14) {
+        ctx.fillStyle = 'rgba(255,255,255,.85)';
+        ctx.font = 'bold 7px Inter,sans-serif';
+        ctx.textAlign   = isPos ? 'left' : 'right';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(b.side, isPos ? midX + 3 : midX - 3, cy);
+      }
+    } else {
+      // zero tick
+      ctx.fillStyle = gridColor; ctx.fillRect(midX - 1, barY, 2, barH);
+    }
+
+    // Strike label (left column)
+    ctx.fillStyle    = b.isATM ? 'rgba(245,158,11,.9)' : b.isSup ? '#22c55e' : b.isRes ? '#ef4444' : textColor;
+    ctx.font         = `${b.isATM || b.isSup || b.isRes ? 'bold ' : ''}8px Inter,sans-serif`;
+    ctx.textAlign    = 'right';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(String(b.strike).slice(-5), PAD.left - 3, cy);
+  });
+}
+
 
 // ── Connection Status ────────────────────────────────────────────────
 function setConn(s) {
