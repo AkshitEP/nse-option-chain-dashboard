@@ -317,7 +317,7 @@ function renderTable(sym, data) {
     const d = r.expiryDates || r.CE?.expiryDate || r.PE?.expiryDate || '';
     return !expiry || d === expiry || d.includes(expiry);
   });
-  const useRows = (fRows.length ? fRows : rows).sort((a, b) => a.strikePrice - b.strikePrice);
+  const useRows = (fRows.length ? fRows : rows).sort((a, b) => b.strikePrice - a.strikePrice);
   const atm     = symState[sym].customStrike || symState[sym].atm || findATM(useRows, spot);
   const atmIdx  = useRows.findIndex(r => r.strikePrice === atm);
   const symN    = symState[sym].N ?? 4;
