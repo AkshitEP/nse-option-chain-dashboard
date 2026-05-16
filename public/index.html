@@ -292,6 +292,48 @@
     </div>
   </div>
 
+  <!-- ════════════ MARKET OVERVIEW ════════════════════════════════════ -->
+  <section class="mkt-overview-section" id="section-market">
+    <div class="mkt-section-header">
+      <span class="section-badge mkt-badge">MARKET OVERVIEW</span>
+      <span class="mkt-timestamp">As on 15-May-2026 16:00:00 IST</span>
+    </div>
+
+    <!-- Advance / Decline -->
+    <div class="adv-dec-block">
+      <h3 class="mkt-sub-title">📊 Market Breadth — Advances / Declines</h3>
+      <div class="adv-dec-cards">
+        <div class="ad-card ad-advance"><div class="ad-num">1,215</div><div class="ad-label">Advances</div></div>
+        <div class="ad-card ad-decline"><div class="ad-num">2,027</div><div class="ad-label">Declines</div></div>
+        <div class="ad-card ad-unchanged"><div class="ad-num">124</div><div class="ad-label">Unchanged</div></div>
+      </div>
+      <div class="breadth-bar">
+        <div class="bb-seg bb-adv" style="width:36.14%"><span>36.1%</span></div>
+        <div class="bb-seg bb-unch" style="width:3.69%"></div>
+        <div class="bb-seg bb-dec" style="width:60.17%"><span>60.2%</span></div>
+      </div>
+      <div class="breadth-verdict bearish">⚠ Bearish Breadth — Declines dominate</div>
+    </div>
+
+    <!-- Sectoral Tables -->
+    <div class="mkt-sectors" id="mkt-sectors"></div>
+
+    <!-- Full Nifty 50 -->
+    <div class="mkt-full-table-block">
+      <h3 class="mkt-sub-title">📋 Complete Nifty 50 Constituents</h3>
+      <div class="mkt-table-scroll">
+        <table class="mkt-table" id="nifty50-full-table">
+          <thead><tr>
+            <th>#</th><th>Name</th><th>CMP (₹)</th><th>P/E</th><th>MCap (₹Cr)</th>
+            <th>Div Yld%</th><th>NP Qtr (₹Cr)</th><th>Qtr Profit Var%</th>
+            <th>Sales Qtr (₹Cr)</th><th>Qtr Sales Var%</th><th>ROCE%</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
   <!-- ── Phase-change Toast ─────────────────────────────────────── -->
   <div id="toast-container"></div>
 

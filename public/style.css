@@ -593,3 +593,81 @@ tr.atm-row td.td-strike {
 }
 .sr-tag.sup { background: rgba(34,197,94,.18); color: #22c55e; border: 1px solid rgba(34,197,94,.35); }
 .sr-tag.res { background: rgba(239,68,68,.18);  color: #ef4444; border: 1px solid rgba(239,68,68,.35); }
+
+/* ── Market Overview Section ─────────────────────────────────────── */
+.mkt-overview-section {
+  margin: 20px 20px 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--bg2);
+}
+.mkt-section-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 14px; background: var(--bg3);
+  border-bottom: 1px solid var(--border);
+}
+.mkt-badge { background: linear-gradient(135deg, #f59e0b, #ef4444); }
+.mkt-timestamp { font-size: 11px; color: var(--text3); font-family: var(--font-mono); }
+.mkt-sub-title {
+  font-size: 14px; font-weight: 700; margin-bottom: 12px;
+  padding-bottom: 8px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 6px;
+}
+
+/* Advance / Decline */
+.adv-dec-block { padding: 16px; }
+.adv-dec-cards { display: flex; gap: 12px; margin-bottom: 14px; }
+.ad-card {
+  flex: 1; padding: 16px; border-radius: var(--radius-sm);
+  text-align: center;
+}
+.ad-advance { background: rgba(34,197,94,.10); border: 1px solid rgba(34,197,94,.25); }
+.ad-advance .ad-num { color: var(--green); }
+.ad-decline { background: rgba(239,68,68,.10); border: 1px solid rgba(239,68,68,.25); }
+.ad-decline .ad-num { color: var(--red); }
+.ad-unchanged { background: rgba(245,158,11,.10); border: 1px solid rgba(245,158,11,.25); }
+.ad-unchanged .ad-num { color: var(--gold); }
+.ad-num { font-size: 28px; font-weight: 800; font-family: var(--font-mono); letter-spacing: -1px; }
+.ad-label { font-size: 10px; color: var(--text2); margin-top: 3px; text-transform: uppercase; letter-spacing: 1px; font-weight: 600; }
+.breadth-bar { display: flex; height: 24px; border-radius: 12px; overflow: hidden; background: var(--bg3); margin-bottom: 8px; }
+.bb-seg { display: flex; align-items: center; justify-content: center; }
+.bb-seg span { font-size: 10px; font-weight: 700; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.4); }
+.bb-adv { background: linear-gradient(90deg, #16a34a, #22c55e); }
+.bb-unch { background: #eab308; }
+.bb-dec { background: linear-gradient(90deg, #ef4444, #dc2626); }
+.breadth-verdict {
+  text-align: center; font-size: 12px; font-weight: 600;
+  padding: 5px 12px; border-radius: var(--radius-sm);
+}
+.breadth-verdict.bearish { color: var(--red); background: rgba(239,68,68,.10); }
+.breadth-verdict.bullish { color: var(--green); background: rgba(34,197,94,.10); }
+
+/* Sector blocks */
+.mkt-sector-block { padding: 16px; border-top: 1px solid var(--border); }
+.mkt-table-scroll { overflow-x: auto; }
+.mkt-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.mkt-table th {
+  background: var(--bg3); color: var(--text3);
+  font-size: 10px; text-transform: uppercase; letter-spacing: .7px; font-weight: 600;
+  padding: 8px 10px; text-align: right; white-space: nowrap;
+  border-bottom: 2px solid var(--purple);
+}
+.mkt-table th:nth-child(1) { text-align: center; width: 36px; }
+.mkt-table th:nth-child(2) { text-align: left; }
+.mkt-table td {
+  padding: 7px 10px; border-bottom: 1px solid var(--border);
+  text-align: right; white-space: nowrap; font-family: var(--font-mono); font-size: 11px;
+}
+.mkt-table td:first-child { text-align: center; color: var(--text3); font-weight: 600; }
+.mkt-table tr:hover td { background: rgba(99,102,241,.05); }
+.mkt-name-cell { text-align: left !important; font-weight: 600; color: #818cf8; font-family: var(--font-main) !important; }
+.mkt-pos { color: var(--green) !important; font-weight: 600; }
+.mkt-neg { color: var(--red) !important; font-weight: 600; }
+.mkt-full-table-block { padding: 16px; border-top: 1px solid var(--border); }
+.mkt-full-table-block .mkt-table-scroll { max-height: 60vh; overflow-y: auto; }
+
+@media (max-width: 768px) {
+  .adv-dec-cards { flex-direction: column; }
+  .mkt-overview-section { margin: 12px 8px 0; }
+}
