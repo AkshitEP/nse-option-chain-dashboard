@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Nifty 50 Market Overview</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="market.css"/>
+</head>
+<body>
+  <header class="top-bar">
+    <div class="brand"><span class="brand-icon">N</span><span class="brand-name">NIFTY 50 <span class="sub">Market Overview</span></span></div>
+    <div class="bar-right">
+      <span class="timestamp">As on 15-May-2026 16:00:00 IST</span>
+      <a href="index.html" class="nav-link">Option Chain →</a>
+    </div>
+  </header>
+
+  <!-- Advance / Decline Section -->
+  <section class="adv-dec-section">
+    <h2 class="section-title">📊 Market Breadth — Advances / Declines</h2>
+    <div class="adv-dec-cards">
+      <div class="ad-card advance"><div class="ad-num">1,215</div><div class="ad-label">Advances</div></div>
+      <div class="ad-card decline"><div class="ad-num">2,027</div><div class="ad-label">Declines</div></div>
+      <div class="ad-card unchanged"><div class="ad-num">124</div><div class="ad-label">Unchanged</div></div>
+    </div>
+    <div class="breadth-bar-wrap">
+      <div class="breadth-bar">
+        <div class="bb-adv" style="width:36.14%"><span>36.1%</span></div>
+        <div class="bb-unch" style="width:3.69%"></div>
+        <div class="bb-dec" style="width:60.17%"><span>60.2%</span></div>
+      </div>
+      <div class="breadth-verdict bearish">⚠ Bearish Breadth — Declines dominate</div>
+    </div>
+  </section>
+
+  <!-- Sectoral Panels -->
+  <section class="sector-section">
+    <h2 class="section-title">🏆 Nifty Top 10 (by Market Cap)</h2>
+    <div class="sector-table-wrap">
+      <table class="sector-table" id="top10-table">
+        <thead><tr><th>#</th><th>Name</th><th>CMP (₹)</th><th>P/E</th><th>MCap (₹Cr)</th><th>Div Yld%</th><th>ROCE%</th><th>Qtr Profit Var%</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="sector-section">
+    <h2 class="section-title">💻 IT Index</h2>
+    <div class="sector-table-wrap">
+      <table class="sector-table" id="it-table">
+        <thead><tr><th>#</th><th>Name</th><th>CMP (₹)</th><th>P/E</th><th>MCap (₹Cr)</th><th>Div Yld%</th><th>ROCE%</th><th>Qtr Profit Var%</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="sector-section">
+    <h2 class="section-title">💊 Pharma</h2>
+    <div class="sector-table-wrap">
+      <table class="sector-table" id="pharma-table">
+        <thead><tr><th>#</th><th>Name</th><th>CMP (₹)</th><th>P/E</th><th>MCap (₹Cr)</th><th>Div Yld%</th><th>ROCE%</th><th>Qtr Profit Var%</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="sector-section">
+    <h2 class="section-title">🚗 Nifty Auto</h2>
+    <div class="sector-table-wrap">
+      <table class="sector-table" id="auto-table">
+        <thead><tr><th>#</th><th>Name</th><th>CMP (₹)</th><th>P/E</th><th>MCap (₹Cr)</th><th>Div Yld%</th><th>ROCE%</th><th>Qtr Profit Var%</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="sector-section">
+    <h2 class="section-title">⛏️ Nifty Metal</h2>
+    <div class="sector-table-wrap">
+      <table class="sector-table" id="metal-table">
+        <thead><tr><th>#</th><th>Name</th><th>CMP (₹)</th><th>P/E</th><th>MCap (₹Cr)</th><th>Div Yld%</th><th>ROCE%</th><th>Qtr Profit Var%</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="sector-section">
+    <h2 class="section-title">🏢 Adani Group (Enterprise & Ports)</h2>
+    <div class="sector-table-wrap">
+      <table class="sector-table" id="adani-table">
+        <thead><tr><th>#</th><th>Name</th><th>CMP (₹)</th><th>P/E</th><th>MCap (₹Cr)</th><th>Div Yld%</th><th>ROCE%</th><th>Qtr Profit Var%</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Full Nifty 50 Table -->
+  <section class="full-table-section">
+    <h2 class="section-title">📋 Complete Nifty 50 Constituents</h2>
+    <div class="full-table-wrap">
+      <table class="nifty-full-table" id="nifty50-table">
+        <thead>
+          <tr>
+            <th>#</th><th>Name</th><th>CMP (₹)</th><th>P/E</th><th>MCap (₹Cr)</th>
+            <th>Div Yld%</th><th>NP Qtr (₹Cr)</th><th>Qtr Profit Var%</th>
+            <th>Sales Qtr (₹Cr)</th><th>Qtr Sales Var%</th><th>ROCE%</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer class="page-footer">Nifty 50 Market Overview • Data from Screener.in & NSE India • For educational use only</footer>
+
+  <script src="market.js"></script>
+</body>
+</html>
