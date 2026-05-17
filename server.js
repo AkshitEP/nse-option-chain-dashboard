@@ -248,7 +248,7 @@ app.get('/api/sector-indices', async (_req, res) => {
           // First item in data array is the index itself
           const indexRow = json?.data?.[0];
           if (indexRow) {
-            out.push({
+            const card = {
               key: idx.key,
               label: idx.label,
               emoji: idx.emoji,
@@ -259,7 +259,18 @@ app.get('/api/sector-indices', async (_req, res) => {
               pChange: indexRow.pChange || 0,
               dayHigh: indexRow.dayHigh || 0,
               dayLow: indexRow.dayLow || 0,
-            });
+            };
+            // Attach top 10 constituents for NIFTY 50
+            if (idx.key === 'NIFTY 50' && json?.data?.length > 1) {
+              card.top10 = json.data.slice(1, 11).map(s => ({
+                symbol: s.symbol || '',
+                name: s.meta?.companyName || s.symbol || '',
+                last: s.lastPrice || 0,
+                change: s.change || 0,
+                pChange: s.pChange || 0,
+              }));
+            }
+            out.push(card);
           }
         } catch (e) { /* skip failed index */ }
       }

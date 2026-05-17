@@ -622,7 +622,25 @@ startTimer();
       const arrow = up ? '▲' : '▼';
       const sign = up ? '+' : '';
       const fmt = v => typeof v === 'number' ? v.toLocaleString('en-IN', {maximumFractionDigits:2}) : '—';
-      return `<div class="sector-card ${cls}">
+      const isTop10 = s.top10 && s.top10.length > 0;
+      const extraCls = isTop10 ? ' sector-card-wide' : '';
+      let top10Html = '';
+      if (isTop10) {
+        top10Html = `<div class="sc-top10">
+          <table class="sc-top10-table"><tbody>${s.top10.map((st, i) => {
+            const stUp = st.pChange >= 0;
+            const stCls = stUp ? 'sc-t10-up' : 'sc-t10-down';
+            const stSign = stUp ? '+' : '';
+            return `<tr class="${stCls}">
+              <td class="sc-t10-idx">${i+1}</td>
+              <td class="sc-t10-sym">${st.symbol}</td>
+              <td class="sc-t10-price">${fmt(st.last)}</td>
+              <td class="sc-t10-chg">${stSign}${st.pChange.toFixed(2)}%</td>
+            </tr>`;
+          }).join('')}</tbody></table>
+        </div>`;
+      }
+      return `<div class="sector-card ${cls}${extraCls}">
         <div class="sc-header">
           <span class="sc-emoji">${s.emoji}</span>
           <span class="sc-name">${s.label}</span>
@@ -644,6 +662,7 @@ startTimer();
           </div>
           <span class="sc-high">${fmt(s.dayHigh)}</span>
         </div>
+        ${top10Html}
       </div>`;
     }).join('');
   }
