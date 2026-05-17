@@ -645,7 +645,7 @@ tr.atm-row td.td-strike {
 
 /* Sector Index Cards */
 .sector-cards {
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
   padding: 16px;
 }
 .sector-card {

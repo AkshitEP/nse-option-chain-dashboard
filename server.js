@@ -213,11 +213,13 @@ app.get('/api/option-chain', async (req, res) => {
 // ── Sector Indices Cache ──────────────────────────────────────────
 let sectorCache = { data: null, time: 0 };
 const SECTOR_INDICES = [
-  { key: 'NIFTY IT',     label: 'Nifty IT',    emoji: '💻' },
-  { key: 'NIFTY PHARMA', label: 'Nifty Pharma', emoji: '💊' },
-  { key: 'NIFTY AUTO',   label: 'Nifty Auto',   emoji: '🚗' },
-  { key: 'NIFTY METAL',  label: 'Nifty Metal',  emoji: '⛏️' },
+  { key: 'NIFTY 50',     label: 'Nifty Top 10', emoji: '🏆' },
+  { key: 'NIFTY IT',     label: 'Nifty IT',     emoji: '💻' },
+  { key: 'NIFTY PHARMA', label: 'Nifty Pharma',  emoji: '💊' },
+  { key: 'NIFTY AUTO',   label: 'Nifty Auto',    emoji: '🚗' },
+  { key: 'NIFTY METAL',  label: 'Nifty Metal',   emoji: '⛏️' },
 ];
+const ADANI_STOCKS = ['Adani Enterprises Ltd.', 'Adani Ports and Special Economic Zone Ltd.'];
 
 app.get('/api/sector-indices', async (_req, res) => {
   // Return cache if fresh (< 60s)
@@ -233,13 +235,16 @@ app.get('/api/sector-indices', async (_req, res) => {
   }
 
   try {
-    const results = await warmPage.evaluate(async (indices) => {
+    const results = await warmPage.evaluate(async (indices, adaniNames) => {
       const out = [];
+      let nifty50Data = null;
       for (const idx of indices) {
         try {
           const url = `https://www.nseindia.com/api/equity-stockIndices?index=${encodeURIComponent(idx.key)}`;
           const r = await fetch(url, { credentials: 'include', headers: { Accept: 'application/json' } });
           const json = await r.json();
+          // Save NIFTY 50 full data for Adani extraction
+          if (idx.key === 'NIFTY 50') nifty50Data = json?.data || [];
           // First item in data array is the index itself
           const indexRow = json?.data?.[0];
           if (indexRow) {
@@ -258,8 +263,29 @@ app.get('/api/sector-indices', async (_req, res) => {
           }
         } catch (e) { /* skip failed index */ }
       }
+      // Compute Adani group from NIFTY 50 constituents
+      if (nifty50Data && nifty50Data.length > 0) {
+        const adaniStocks = nifty50Data.filter(s => adaniNames.some(n => (s.symbol || '').includes('ADANI') || (s.meta?.companyName || '').includes('Adani') || n === (s.meta?.companyName || '')));
+        // Fallback: match by symbol
+        const adani = adaniStocks.length > 0 ? adaniStocks : nifty50Data.filter(s => ['ADANIENT', 'ADANIPORTS'].includes(s.symbol));
+        if (adani.length > 0) {
+          const avgChange = adani.reduce((sum, s) => sum + (s.change || 0), 0) / adani.length;
+          const avgPChange = adani.reduce((sum, s) => sum + (s.pChange || 0), 0) / adani.length;
+          const avgLast = adani.reduce((sum, s) => sum + (s.lastPrice || 0), 0) / adani.length;
+          const avgOpen = adani.reduce((sum, s) => sum + (s.open || 0), 0) / adani.length;
+          const avgPrev = adani.reduce((sum, s) => sum + (s.previousClose || 0), 0) / adani.length;
+          const minLow = Math.min(...adani.map(s => s.dayLow || 0));
+          const maxHigh = Math.max(...adani.map(s => s.dayHigh || 0));
+          out.push({
+            key: 'ADANI_GROUP', label: 'Adani Group', emoji: '🏢',
+            last: avgLast, open: avgOpen, previousClose: avgPrev,
+            change: avgChange, pChange: avgPChange,
+            dayHigh: maxHigh, dayLow: minLow,
+          });
+        }
+      }
       return out;
-    }, SECTOR_INDICES);
+    }, SECTOR_INDICES, ADANI_STOCKS);
 
     if (results.length > 0) {
       sectorCache = { data: results, time: Date.now() };
