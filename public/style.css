@@ -643,31 +643,78 @@ tr.atm-row td.td-strike {
 .breadth-verdict.bearish { color: var(--red); background: rgba(239,68,68,.10); }
 .breadth-verdict.bullish { color: var(--green); background: rgba(34,197,94,.10); }
 
-/* Sector blocks */
-.mkt-sector-block { padding: 16px; border-top: 1px solid var(--border); }
-.mkt-table-scroll { overflow-x: auto; }
-.mkt-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-.mkt-table th {
-  background: var(--bg3); color: var(--text3);
-  font-size: 10px; text-transform: uppercase; letter-spacing: .7px; font-weight: 600;
-  padding: 8px 10px; text-align: right; white-space: nowrap;
-  border-bottom: 2px solid var(--purple);
+/* Sector Index Cards */
+.sector-cards {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+  padding: 16px;
 }
-.mkt-table th:nth-child(1) { text-align: center; width: 36px; }
-.mkt-table th:nth-child(2) { text-align: left; }
-.mkt-table td {
-  padding: 7px 10px; border-bottom: 1px solid var(--border);
-  text-align: right; white-space: nowrap; font-family: var(--font-mono); font-size: 11px;
+.sector-card {
+  background: var(--bg3); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 16px;
+  transition: transform .2s, box-shadow .2s, border-color .2s;
+  position: relative; overflow: hidden;
 }
-.mkt-table td:first-child { text-align: center; color: var(--text3); font-weight: 600; }
-.mkt-table tr:hover td { background: rgba(99,102,241,.05); }
-.mkt-name-cell { text-align: left !important; font-weight: 600; color: #818cf8; font-family: var(--font-main) !important; }
-.mkt-pos { color: var(--green) !important; font-weight: 600; }
-.mkt-neg { color: var(--red) !important; font-weight: 600; }
-.mkt-full-table-block { padding: 16px; border-top: 1px solid var(--border); }
-.mkt-full-table-block .mkt-table-scroll { max-height: 60vh; overflow-y: auto; }
+.sector-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+}
+.sector-card.sector-up::before { background: linear-gradient(90deg, #16a34a, #22c55e); }
+.sector-card.sector-down::before { background: linear-gradient(90deg, #ef4444, #dc2626); }
+.sector-card:hover {
+  transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,.3);
+  border-color: var(--purple);
+}
+.sector-card.sector-loading {
+  grid-column: 1 / -1; text-align: center; color: var(--text3);
+  font-size: 13px; padding: 24px;
+}
+.sc-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.sc-emoji { font-size: 20px; }
+.sc-name { font-size: 14px; font-weight: 700; color: var(--text); letter-spacing: .3px; }
+.sc-price {
+  font-family: var(--font-mono); font-size: 22px; font-weight: 800;
+  color: var(--text); margin-bottom: 4px; letter-spacing: -.5px;
+}
+.sc-change { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
+.sc-arrow { font-size: 12px; }
+.sc-pct { font-family: var(--font-mono); font-size: 16px; font-weight: 700; }
+.sc-abs { font-family: var(--font-mono); font-size: 11px; color: var(--text3); }
+.sector-up .sc-arrow, .sector-up .sc-pct { color: var(--green); }
+.sector-down .sc-arrow, .sector-down .sc-pct { color: var(--red); }
+.sc-meta {
+  display: flex; justify-content: space-between; font-size: 10px;
+  color: var(--text3); font-family: var(--font-mono); margin-bottom: 10px;
+  padding-bottom: 8px; border-bottom: 1px solid var(--border);
+}
+.sc-range {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 10px; font-family: var(--font-mono); color: var(--text3);
+}
+.sc-low { color: var(--red); font-weight: 600; }
+.sc-high { color: var(--green); font-weight: 600; }
+.sc-range-bar {
+  flex: 1; height: 4px; background: var(--bg4); border-radius: 2px;
+  position: relative;
+}
+.sc-range-fill {
+  position: absolute; top: -2px; width: 8px; height: 8px;
+  background: var(--accent2); border-radius: 50%;
+  transform: translateX(-50%);
+  box-shadow: 0 0 6px rgba(99,102,241,.5);
+}
+.sector-spinner {
+  display: inline-block; width: 14px; height: 14px;
+  border: 2px solid var(--text3); border-top-color: var(--accent);
+  border-radius: 50%; animation: spin .8s linear infinite;
+  vertical-align: middle; margin-right: 6px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
 
+@media (max-width: 900px) {
+  .sector-cards { grid-template-columns: repeat(2, 1fr); }
+}
 @media (max-width: 768px) {
   .adv-dec-cards { flex-direction: column; }
   .mkt-overview-section { margin: 12px 8px 0; }
+  .sector-cards { grid-template-columns: 1fr; }
 }

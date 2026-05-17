@@ -210,6 +210,71 @@ app.get('/api/option-chain', async (req, res) => {
     symbol, timestamp: Date.now(), error: `${symbol} data loading — please wait.` });
 });
 
+// ── Sector Indices Cache ──────────────────────────────────────────
+let sectorCache = { data: null, time: 0 };
+const SECTOR_INDICES = [
+  { key: 'NIFTY IT',     label: 'Nifty IT',    emoji: '💻' },
+  { key: 'NIFTY PHARMA', label: 'Nifty Pharma', emoji: '💊' },
+  { key: 'NIFTY AUTO',   label: 'Nifty Auto',   emoji: '🚗' },
+  { key: 'NIFTY METAL',  label: 'Nifty Metal',  emoji: '⛏️' },
+];
+
+app.get('/api/sector-indices', async (_req, res) => {
+  // Return cache if fresh (< 60s)
+  if (sectorCache.data && Date.now() - sectorCache.time < 60_000) {
+    return res.json({ success: true, data: sectorCache.data, cached: true, timestamp: sectorCache.time });
+  }
+
+  if (!browserReady || !warmPage || warmPage.isClosed()) {
+    if (sectorCache.data) {
+      return res.json({ success: true, data: sectorCache.data, cached: true, stale: true, timestamp: sectorCache.time });
+    }
+    return res.json({ success: false, error: 'Browser not ready' });
+  }
+
+  try {
+    const results = await warmPage.evaluate(async (indices) => {
+      const out = [];
+      for (const idx of indices) {
+        try {
+          const url = `https://www.nseindia.com/api/equity-stockIndices?index=${encodeURIComponent(idx.key)}`;
+          const r = await fetch(url, { credentials: 'include', headers: { Accept: 'application/json' } });
+          const json = await r.json();
+          // First item in data array is the index itself
+          const indexRow = json?.data?.[0];
+          if (indexRow) {
+            out.push({
+              key: idx.key,
+              label: idx.label,
+              emoji: idx.emoji,
+              last: indexRow.lastPrice || indexRow.last || 0,
+              open: indexRow.open || 0,
+              previousClose: indexRow.previousClose || 0,
+              change: indexRow.change || 0,
+              pChange: indexRow.pChange || 0,
+              dayHigh: indexRow.dayHigh || 0,
+              dayLow: indexRow.dayLow || 0,
+            });
+          }
+        } catch (e) { /* skip failed index */ }
+      }
+      return out;
+    }, SECTOR_INDICES);
+
+    if (results.length > 0) {
+      sectorCache = { data: results, time: Date.now() };
+      console.log(`[NSE] ✅ Sector indices fetched: ${results.map(r => `${r.label} ${r.pChange > 0 ? '+' : ''}${r.pChange.toFixed(2)}%`).join(', ')}`);
+    }
+    return res.json({ success: true, data: results, timestamp: Date.now() });
+  } catch (err) {
+    console.error('[NSE] Sector fetch error:', err.message);
+    if (sectorCache.data) {
+      return res.json({ success: true, data: sectorCache.data, cached: true, stale: true, timestamp: sectorCache.time });
+    }
+    return res.json({ success: false, error: err.message });
+  }
+});
+
 app.get('/api/health', (_req, res) => res.json({
   status: 'ok', browserReady, errorStreak, pollCount,
   cache: Object.fromEntries(SUPPORTED.map(s => [s, cacheMap[s]
