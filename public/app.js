@@ -615,6 +615,29 @@ startTimer();
   const container = document.getElementById('sector-cards');
   if (!container) return;
 
+  const T10_COLORS = ['#6366f1','#8b5cf6','#a78bfa','#c084fc','#e879f9','#f472b6','#fb7185','#f87171','#fbbf24','#34d399'];
+
+  function buildDonut(stocks) {
+    const abs = stocks.map(s => Math.abs(s.pChange));
+    const total = abs.reduce((a,b) => a+b, 0) || 1;
+    const r = 54, cx = 64, cy = 64, circumference = 2 * Math.PI * r;
+    let offset = 0;
+    const segs = stocks.map((s, i) => {
+      const pct = abs[i] / total;
+      const dash = pct * circumference;
+      const gap = circumference - dash;
+      const seg = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${T10_COLORS[i]}" stroke-width="12"
+        stroke-dasharray="${dash.toFixed(2)} ${gap.toFixed(2)}" stroke-dashoffset="${(-offset).toFixed(2)}"
+        transform="rotate(-90 ${cx} ${cy})" opacity="0.85"/>`;
+      offset += dash;
+      return seg;
+    }).join('');
+    return `<svg viewBox="0 0 128 128" class="sc-donut">${segs}
+      <text x="${cx}" y="${cy-4}" text-anchor="middle" fill="var(--text)" font-size="11" font-weight="800" font-family="var(--font-mono)">TOP 10</text>
+      <text x="${cx}" y="${cy+10}" text-anchor="middle" fill="var(--text3)" font-size="8" font-weight="600">Daily %</text>
+    </svg>`;
+  }
+
   function renderCards(sectors) {
     container.innerHTML = sectors.map(s => {
       const up = s.pChange >= 0;
@@ -623,21 +646,27 @@ startTimer();
       const sign = up ? '+' : '';
       const fmt = v => typeof v === 'number' ? v.toLocaleString('en-IN', {maximumFractionDigits:2}) : '—';
       const isTop10 = s.top10 && s.top10.length > 0;
-      const extraCls = isTop10 ? ' sector-card-wide' : '';
+      const extraCls = isTop10 ? ' sector-card-top10' : '';
       let top10Html = '';
       if (isTop10) {
+        const donut = buildDonut(s.top10);
+        const rows = s.top10.map((st, i) => {
+          const stUp = st.pChange >= 0;
+          const stCls = stUp ? 'sc-t10-up' : 'sc-t10-down';
+          const stSign = stUp ? '+' : '';
+          return `<tr class="${stCls}">
+            <td class="sc-t10-dot" style="color:${T10_COLORS[i]}">●</td>
+            <td class="sc-t10-sym">${st.symbol}</td>
+            <td class="sc-t10-chg">${stSign}${st.pChange.toFixed(2)}%</td>
+          </tr>`;
+        }).join('');
         top10Html = `<div class="sc-top10">
-          <table class="sc-top10-table"><tbody>${s.top10.map((st, i) => {
-            const stUp = st.pChange >= 0;
-            const stCls = stUp ? 'sc-t10-up' : 'sc-t10-down';
-            const stSign = stUp ? '+' : '';
-            return `<tr class="${stCls}">
-              <td class="sc-t10-idx">${i+1}</td>
-              <td class="sc-t10-sym">${st.symbol}</td>
-              <td class="sc-t10-price">${fmt(st.last)}</td>
-              <td class="sc-t10-chg">${stSign}${st.pChange.toFixed(2)}%</td>
-            </tr>`;
-          }).join('')}</tbody></table>
+          <div class="sc-top10-layout">
+            <div class="sc-donut-wrap">${donut}</div>
+            <div class="sc-top10-list">
+              <table class="sc-top10-table"><tbody>${rows}</tbody></table>
+            </div>
+          </div>
         </div>`;
       }
       return `<div class="sector-card ${cls}${extraCls}">
