@@ -716,10 +716,10 @@ tr.atm-row td.td-strike {
 .sc-donut { width: 100%; height: 100%; }
 .sc-top10-list { flex: 1; min-width: 0; }
 .sc-top10-table { width: 100%; border-collapse: collapse; }
-.sc-top10-table td { padding: 2px 4px; font-size: 10px; font-family: var(--font-mono); }
-.sc-t10-dot { width: 14px; font-size: 8px; text-align: center; }
-.sc-t10-sym { font-weight: 600; color: var(--text2); font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70px; }
-.sc-t10-chg { text-align: right; font-weight: 700; font-size: 10px; }
+.sc-top10-table td { padding: 4px 6px; font-size: 12px; font-family: var(--font-mono); }
+.sc-t10-dot { width: 16px; font-size: 10px; text-align: center; }
+.sc-t10-sym { font-weight: 600; color: var(--text2); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 90px; }
+.sc-t10-chg { text-align: right; font-weight: 700; font-size: 13px; }
 .sc-t10-up .sc-t10-chg { color: var(--green); }
 .sc-t10-down .sc-t10-chg { color: var(--red); }
 .sc-top10-table tr:hover td { background: rgba(99,102,241,.06); }
