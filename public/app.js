@@ -200,9 +200,11 @@ function updateSymbolPanel(symbol, data) {
   if (!rows.length) return;
 
   const spot   = records.underlyingValue || rows.find(r => r.CE?.underlyingValue)?.CE?.underlyingValue || 0;
-  const expiry = (records.expiryDates || [])[0] || '—';
+  // Use the user-selected expiry, falling back to the first available
+  const expiry = symState[symbol].expiry || (records.expiryDates || [])[0] || '—';
   const atm    = findATM(rows, spot);
 
+  // Filter rows to match the selected expiry (consistent with renderTable)
   const fRows   = rows.filter(r => {
     const d = r.expiryDates || r.CE?.expiryDate || r.PE?.expiryDate || '';
     return !expiry || d === expiry || d.includes(expiry);
@@ -277,14 +279,25 @@ function processData(sym, data) {
   const expiryDates = records.expiryDates || [];
   const p           = prefix(sym);
 
-  // Populate expiry dropdown (once per symbol)
-  if (expiryDates.length > 1 && $(`${p}-expiry-select`)?.options.length === 0) {
+  // Populate expiry dropdown (update every fetch to reflect latest data)
+  if (expiryDates.length > 1) {
     const sel = $(`${p}-expiry-select`);
-    expiryDates.forEach(e => {
-      const opt = document.createElement('option');
-      opt.value = opt.textContent = e;
-      sel.appendChild(opt);
-    });
+    const currentVal = sel.value;
+    // Rebuild options only if the expiry list changed
+    const existingOpts = Array.from(sel.options).map(o => o.value).join(',');
+    const newOpts = expiryDates.join(',');
+    if (existingOpts !== newOpts) {
+      sel.innerHTML = '';
+      expiryDates.forEach(e => {
+        const opt = document.createElement('option');
+        opt.value = opt.textContent = e;
+        sel.appendChild(opt);
+      });
+      // Restore selection if it still exists
+      if (currentVal && expiryDates.includes(currentVal)) {
+        sel.value = currentVal;
+      }
+    }
     $(`${p}-expiry-sel`).style.display = 'flex';
   }
   symState[sym].expiryDates = expiryDates;

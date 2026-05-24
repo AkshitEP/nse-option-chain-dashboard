@@ -19,6 +19,7 @@ const POLL_MS     = 45_000;
 
 const contractInfoUrl = s => `https://www.nseindia.com/api/option-chain-contract-info?symbol=${s}`;
 const v3Url           = s => `https://www.nseindia.com/api/option-chain-v3?type=Indices&symbol=${s}`;
+const indicesUrl      = s => `https://www.nseindia.com/api/option-chain-indices?symbol=${s}`;
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -65,6 +66,26 @@ async function warmSession() {
 }
 
 async function fetchV3Data(symbol) {
+  // Strategy 1: Try full option-chain-indices (returns all expiries)
+  const fullResult = await warmPage.evaluate(async (fullUrl) => {
+    try {
+      const r = await fetch(fullUrl, { credentials: 'include', headers: { Accept: 'application/json' } });
+      const text = await r.text();
+      return { status: r.status, text };
+    } catch (e) { return { error: e.message }; }
+  }, indicesUrl(symbol));
+
+  if (!fullResult.error && fullResult.status === 200) {
+    try {
+      const data = JSON.parse(fullResult.text);
+      if (data.records?.data?.length) {
+        console.log(`[NSE] ${symbol} full | expiries:${(data.records.expiryDates||[]).length} | rows:${data.records.data.length}`);
+        return data;
+      }
+    } catch (_) {}
+  }
+
+  // Strategy 2: Fallback to v3 with expiry filter
   const result = await warmPage.evaluate(async (ciUrl, apiBase) => {
     try {
       const r1   = await fetch(ciUrl, { credentials: 'include', headers: { Accept: 'application/json' } });
