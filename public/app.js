@@ -164,11 +164,17 @@ function computeMaxPain(rows) {
 SYMBOLS.forEach(sym => {
   const p = prefix(sym);
 
+  function refreshAll() {
+    if (!symState[sym].data) return;
+    renderTable(sym, symState[sym].data);
+    updateSymbolPanel(sym, symState[sym].data);
+  }
+
   // Expiry
   const sel = $(`${p}-expiry-select`);
   if (sel) sel.addEventListener('change', () => {
     symState[sym].expiry = sel.value || null;
-    if (symState[sym].data) renderTable(sym, symState[sym].data);
+    refreshAll();
   });
 
   // N stepper (per symbol)
@@ -178,7 +184,7 @@ SYMBOLS.forEach(sym => {
   function updateN(delta) {
     symState[sym].N = Math.min(20, Math.max(1, symState[sym].N + delta));
     if (nValEl) nValEl.textContent = symState[sym].N;
-    if (symState[sym].data) renderTable(sym, symState[sym].data);
+    refreshAll();
   }
   if (nDownBtn) nDownBtn.addEventListener('click', () => updateN(-1));
   if (nUpBtn)   nUpBtn.addEventListener('click',   () => updateN(+1));
@@ -190,7 +196,7 @@ SYMBOLS.forEach(sym => {
     const v    = parseFloat(strikeInput?.value);
     const step = sym === 'BANKNIFTY' ? 100 : 50;
     symState[sym].customStrike = isNaN(v) ? null : Math.round(v / step) * step;
-    if (symState[sym].data) renderTable(sym, symState[sym].data);
+    refreshAll();
   }
   if (applyBtn)    applyBtn.addEventListener('click', applyStrike);
   if (strikeInput) strikeInput.addEventListener('keydown', e => { if (e.key === 'Enter') applyStrike(); });
