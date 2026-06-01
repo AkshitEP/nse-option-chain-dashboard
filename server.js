@@ -13,9 +13,9 @@ app.use(cors());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ── Supported symbols (all NSE Indices) ──────────────────────────
-const SUPPORTED = ['NIFTY', 'BANKNIFTY', 'FINNIFTY'];
+const SUPPORTED = ['NIFTY', 'BANKNIFTY'];
 const NSE_OC_PAGE = 'https://www.nseindia.com/option-chain';
-const POLL_MS     = 45_000;
+const POLL_MS     = 30_000;
 
 const contractInfoUrl = s => `https://www.nseindia.com/api/option-chain-contract-info?symbol=${s}`;
 const v3Url           = s => `https://www.nseindia.com/api/option-chain-v3?type=Indices&symbol=${s}`;
@@ -28,6 +28,7 @@ let browser      = null;
 let warmPage     = null;
 let browserReady = false;
 let errorStreak  = 0;
+let fetchLock    = false;   // mutex to prevent concurrent warmPage access
 
 // ── Per-symbol cache ──────────────────────────────────────────────
 // cacheMap[symbol] = { data, time, count }
@@ -66,6 +67,22 @@ async function warmSession() {
 }
 
 async function fetchV3Data(symbol) {
+  // Acquire lock — prevent concurrent warmPage access
+  if (fetchLock) {
+    // Wait up to 15s for the lock to release
+    const deadline = Date.now() + 15_000;
+    while (fetchLock && Date.now() < deadline) await sleep(300);
+    if (fetchLock) throw new Error(`${symbol}: fetch lock timeout`);
+  }
+  fetchLock = true;
+  try {
+    return await _doFetchV3(symbol);
+  } finally {
+    fetchLock = false;
+  }
+}
+
+async function _doFetchV3(symbol) {
   // Strategy 1: Try full option-chain-indices (returns all expiries)
   const fullResult = await warmPage.evaluate(async (fullUrl) => {
     try {
@@ -339,6 +356,51 @@ app.get('/api/health', (_req, res) => res.json({
     ? { count: cacheMap[s].count, ageS: Math.round((Date.now() - cacheMap[s].time) / 1000) }
     : null])),
 }));
+
+// ── Advance / Decline (live) ─────────────────────────────────────
+let advDecCache = { data: null, time: 0 };
+
+app.get('/api/advance-decline', async (_req, res) => {
+  // Return cache if fresh (< 60s)
+  if (advDecCache.data && Date.now() - advDecCache.time < 60_000) {
+    return res.json({ success: true, data: advDecCache.data, cached: true, timestamp: advDecCache.time });
+  }
+  if (!browserReady || !warmPage || warmPage.isClosed()) {
+    if (advDecCache.data) {
+      return res.json({ success: true, data: advDecCache.data, cached: true, stale: true, timestamp: advDecCache.time });
+    }
+    return res.json({ success: false, error: 'Browser not ready' });
+  }
+  try {
+    const result = await warmPage.evaluate(async () => {
+      try {
+        const r = await fetch('https://www.nseindia.com/api/equity-stockIndices?index=NIFTY%2050', {
+          credentials: 'include', headers: { Accept: 'application/json' }
+        });
+        const json = await r.json();
+        const stocks = (json?.data || []).slice(1); // skip index row
+        let advances = 0, declines = 0, unchanged = 0;
+        stocks.forEach(s => {
+          const chg = s.pChange || s.change || 0;
+          if (chg > 0) advances++;
+          else if (chg < 0) declines++;
+          else unchanged++;
+        });
+        return { advances, declines, unchanged, total: stocks.length, timestamp: json?.timestamp || '' };
+      } catch (e) { return { error: e.message }; }
+    });
+    if (result && !result.error) {
+      advDecCache = { data: result, time: Date.now() };
+      return res.json({ success: true, data: result, timestamp: Date.now() });
+    }
+    throw new Error(result?.error || 'Unknown error');
+  } catch (err) {
+    if (advDecCache.data) {
+      return res.json({ success: true, data: advDecCache.data, cached: true, stale: true, timestamp: advDecCache.time });
+    }
+    return res.json({ success: false, error: err.message });
+  }
+});
 
 app.get('/', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 

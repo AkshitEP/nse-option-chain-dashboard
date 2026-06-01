@@ -2,7 +2,7 @@
 
 // ── Config ─────────────────────────────────────────────────────────
 const API_URL          = '/api/option-chain';
-const REFRESH_INTERVAL = 45;
+const REFRESH_INTERVAL = 30;
 const SYMBOLS          = ['NIFTY', 'BANKNIFTY'];
 
 // ── Shared state ────────────────────────────────────────────────────
@@ -236,11 +236,22 @@ function updateSymbolPanel(symbol, data) {
   checkPhaseChange(symbol, phase.phase, pcr);
 }
 
-// ── Fetch both symbols ─────────────────────────────────────────────
 async function fetchBoth() {
+  let successCount = 0;
+  let lastError = '';
   const results = await Promise.allSettled(SYMBOLS.map(sym => fetchSymbol(sym)));
-  const anyError = results.every(r => r.status === 'rejected');
-  if (anyError) { setConn('error'); showError('Failed to fetch data for all symbols'); }
+  results.forEach(r => {
+    if (r.status === 'fulfilled' && r.value === true) successCount++;
+    else if (r.status === 'rejected') lastError = r.reason?.message || 'Unknown error';
+    else if (r.value === false) lastError = 'fetch failed';
+  });
+  if (successCount === 0) {
+    setConn('error');
+    showError('Failed to fetch data for all symbols');
+  } else if (successCount < SYMBOLS.length) {
+    setConn('connected');
+    showError(`Partial data — some symbols failed: ${lastError}`);
+  }
   resetTimer();
 }
 
@@ -256,16 +267,17 @@ async function fetchSymbol(sym) {
     if (json.sample) {
       setConn('sample');
       showError(`Sample data for ${sym} — NSE connection initialising.`);
+      return false;
     } else if (json.stale) {
       setConn('connected');
-      showError('Some data may be cached.');
     } else {
       setConn('connected');
       hideError();
     }
+    return true;
   } catch (err) {
     console.error(`[${sym}] fetch error:`, err.message);
-    setConn('error');
+    return false;
   }
 }
 
@@ -345,16 +357,26 @@ function renderTable(sym, data) {
   const maxCallCOI = Math.max(...vis.map(r => Math.abs(r.CE?.changeinOpenInterest || 0)));
   const maxPutCOI  = Math.max(...vis.map(r => Math.abs(r.PE?.changeinOpenInterest || 0)));
 
-  // Totals
-  let totCOI = 0, totPOI = 0, totCCOI = 0, totPCOI = 0;
-  vis.forEach(r => {
+  // Totals — compute from ALL expiry-filtered rows for accurate PCR
+  let totCOI = 0, totPOI = 0, totCCOI = 0, totPCCOI = 0;
+  const allExpRows = (fRows.length ? fRows : rows).sort((a, b) => b.strikePrice - a.strikePrice);
+  allExpRows.forEach(r => {
     totCOI  += r.CE?.openInterest || 0;
     totPOI  += r.PE?.openInterest || 0;
     totCCOI += r.CE?.changeinOpenInterest || 0;
-    totPCOI += r.PE?.changeinOpenInterest || 0;
+    totPCCOI += r.PE?.changeinOpenInterest || 0;
   });
   const pcr  = totCOI > 0 ? totPOI / totCOI : 0;
   const imb  = (totCOI + totPOI) > 0 ? Math.abs(totPOI - totCOI) / (totPOI + totCOI) * 100 : 0;
+
+  // Visible-rows totals for the footer
+  let visCOI = 0, visPOI = 0, visCCOI = 0, visPCOI = 0;
+  vis.forEach(r => {
+    visCOI  += r.CE?.openInterest || 0;
+    visPOI  += r.PE?.openInterest || 0;
+    visCCOI += r.CE?.changeinOpenInterest || 0;
+    visPCOI += r.PE?.changeinOpenInterest || 0;
+  });
   const mp   = computeMaxPain(useRows);
 
   // Update section title
@@ -421,15 +443,15 @@ function renderTable(sym, data) {
   });
   $(`${p}-chain-body`).innerHTML = html;
 
-  // Footer totals
+  // Footer totals (visible rows only)
   const setFoot = (id, val, color) => {
     const el = $(id); if (!el) return;
     el.textContent = fmtNum(val); el.style.color = color;
   };
-  setFoot(`${p}-foot-call-coi`, totCCOI, totCCOI >= 0 ? 'var(--call)' : 'var(--red)');
-  setFoot(`${p}-foot-call-oi`,  totCOI,  'var(--call)');
-  setFoot(`${p}-foot-put-oi`,   totPOI,  'var(--put)');
-  setFoot(`${p}-foot-put-coi`,  totPCOI, totPCOI >= 0 ? 'var(--put)' : 'var(--red)');
+  setFoot(`${p}-foot-call-coi`, visCCOI, visCCOI >= 0 ? 'var(--call)' : 'var(--red)');
+  setFoot(`${p}-foot-call-oi`,  visCOI,  'var(--call)');
+  setFoot(`${p}-foot-put-oi`,   visPOI,  'var(--put)');
+  setFoot(`${p}-foot-put-coi`,  visPCOI, visPCOI >= 0 ? 'var(--put)' : 'var(--red)');
 
   // Stat bar
   const setS = (id, val, color) => {
@@ -442,7 +464,7 @@ function renderTable(sym, data) {
   const sbPhase = getPcrPhase(pcr);
   if (pcrSbEl) { pcrSbEl.textContent = fmtPCR(pcr); pcrSbEl.className = `sb-val ${sbPhase.cls}`; }
   setS(`${p}-sb-ccoi`, fmtNum(totCCOI), totCCOI >= 0 ? 'var(--green)' : 'var(--red)');
-  setS(`${p}-sb-pcoi`, fmtNum(totPCOI), totPCOI >= 0 ? 'var(--green)' : 'var(--red)');
+  setS(`${p}-sb-pcoi`, fmtNum(totPCCOI), totPCCOI >= 0 ? 'var(--green)' : 'var(--red)');
   setS(`${p}-sb-imb`,  imb.toFixed(2) + '%');
   const sentEl = $(`${p}-sb-sent`);
   if (sentEl) { sentEl.textContent = `${sbPhase.icon} ${sbPhase.label}`; sentEl.className = `sb-val ${sbPhase.cls}`; }
@@ -731,4 +753,69 @@ startTimer();
   // Fetch immediately, then every 60s
   fetchSectors();
   setInterval(fetchSectors, 60_000);
+})();
+
+// ══════════════════════════════════════════════════════════════════════
+// ── LIVE ADVANCE / DECLINE (Market Breadth) ─────────────────────────
+// ══════════════════════════════════════════════════════════════════════
+(function initAdvDecline() {
+  async function fetchAdvDec() {
+    try {
+      const r = await fetch('/api/advance-decline');
+      const json = await r.json();
+      if (!json.success || !json.data) return;
+      const d = json.data;
+      const total = d.advances + d.declines + d.unchanged;
+      if (total === 0) return;
+
+      const advPct  = ((d.advances / total) * 100).toFixed(1);
+      const decPct  = ((d.declines / total) * 100).toFixed(1);
+      const unchPct = ((d.unchanged / total) * 100).toFixed(1);
+
+      // Update cards
+      const advNum = document.querySelector('.ad-advance .ad-num');
+      const decNum = document.querySelector('.ad-decline .ad-num');
+      const unchNum = document.querySelector('.ad-unchanged .ad-num');
+      if (advNum) advNum.textContent = d.advances.toLocaleString('en-IN');
+      if (decNum) decNum.textContent = d.declines.toLocaleString('en-IN');
+      if (unchNum) unchNum.textContent = d.unchanged.toLocaleString('en-IN');
+
+      // Update breadth bar
+      const advBar = document.querySelector('.bb-adv');
+      const decBar = document.querySelector('.bb-dec');
+      const unchBar = document.querySelector('.bb-unch');
+      if (advBar) { advBar.style.width = advPct + '%'; advBar.querySelector('span').textContent = advPct + '%'; }
+      if (decBar) { decBar.style.width = decPct + '%'; decBar.querySelector('span').textContent = decPct + '%'; }
+      if (unchBar) { unchBar.style.width = unchPct + '%'; }
+
+      // Update verdict
+      const verdict = document.querySelector('.breadth-verdict');
+      if (verdict) {
+        if (d.advances > d.declines) {
+          verdict.textContent = '✅ Bullish Breadth — Advances dominate';
+          verdict.className = 'breadth-verdict bullish';
+        } else if (d.declines > d.advances) {
+          verdict.textContent = '⚠ Bearish Breadth — Declines dominate';
+          verdict.className = 'breadth-verdict bearish';
+        } else {
+          verdict.textContent = '➖ Neutral Breadth — Evenly split';
+          verdict.className = 'breadth-verdict neutral';
+        }
+      }
+
+      // Update timestamp
+      const tsEl = document.querySelector('.mkt-timestamp');
+      if (tsEl) {
+        tsEl.textContent = 'As on ' + new Date().toLocaleString('en-IN', {
+          day: '2-digit', month: 'short', year: 'numeric',
+          hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+        }) + ' IST';
+      }
+    } catch (e) {
+      console.error('[AdvDec] fetch error:', e.message);
+    }
+  }
+
+  fetchAdvDec();
+  setInterval(fetchAdvDec, 60_000);
 })();
