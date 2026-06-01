@@ -34,13 +34,17 @@ const els = {
 };
 
 // ── Formatters ──────────────────────────────────────────────────────
+// Full Indian-comma number (no K/M rounding) for stat bar & footer
+const fmtFull = n => (!n && n !== 0) || isNaN(n) ? '—'
+  : n.toLocaleString('en-IN');
+// Compact number for table cells only
 const fmtNum  = n => (!n && n !== 0) || isNaN(n) ? '—'
-  : Math.abs(n) >= 1e6 ? (n / 1e6).toFixed(2) + 'M'
-  : Math.abs(n) >= 1e3 ? (n / 1e3).toFixed(1) + 'K'
-  : n.toFixed(0);
+  : Math.abs(n) >= 1e7 ? (n / 1e7).toFixed(2) + 'Cr'
+  : Math.abs(n) >= 1e5 ? (n / 1e5).toFixed(2) + 'L'
+  : n.toLocaleString('en-IN');
 const fmtPct  = n => n == null || isNaN(n) ? '—' : (n > 0 ? '+' : '') + n.toFixed(2) + '%';
 const fmtLTP  = n => (!n || isNaN(n) || n === 0) ? '—' : n.toFixed(2);
-const fmtPCR  = n => n == null || isNaN(n) ? '—' : n.toFixed(2);
+const fmtPCR  = n => n == null || isNaN(n) ? '—' : n.toFixed(4);
 const fmtSpt  = n => n == null ? '—' : n.toLocaleString('en-IN',
   { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -214,7 +218,7 @@ function updateSymbolPanel(symbol, data) {
   useRows.forEach(r => { totCOI += r.CE?.openInterest || 0; totPOI += r.PE?.openInterest || 0; });
   const pcr    = totCOI > 0 ? totPOI / totCOI : 0;
   const imb    = (totCOI + totPOI) > 0 ? ((totPOI - totCOI) / (totPOI + totCOI) * 100) : 0;
-  const imbStr = (imb >= 0 ? '+' : '') + imb.toFixed(1) + '%';
+  const imbStr = (imb >= 0 ? '+' : '') + imb.toFixed(2) + '%';
   const phase  = getPcrPhase(pcr);
 
   const pr = prefix(symbol);
@@ -357,26 +361,16 @@ function renderTable(sym, data) {
   const maxCallCOI = Math.max(...vis.map(r => Math.abs(r.CE?.changeinOpenInterest || 0)));
   const maxPutCOI  = Math.max(...vis.map(r => Math.abs(r.PE?.changeinOpenInterest || 0)));
 
-  // Totals — compute from ALL expiry-filtered rows for accurate PCR
-  let totCOI = 0, totPOI = 0, totCCOI = 0, totPCCOI = 0;
-  const allExpRows = (fRows.length ? fRows : rows).sort((a, b) => b.strikePrice - a.strikePrice);
-  allExpRows.forEach(r => {
+  // Totals — from visible rows (matching what user sees in the table)
+  let totCOI = 0, totPOI = 0, totCCOI = 0, totPCOI = 0;
+  vis.forEach(r => {
     totCOI  += r.CE?.openInterest || 0;
     totPOI  += r.PE?.openInterest || 0;
     totCCOI += r.CE?.changeinOpenInterest || 0;
-    totPCCOI += r.PE?.changeinOpenInterest || 0;
+    totPCOI += r.PE?.changeinOpenInterest || 0;
   });
   const pcr  = totCOI > 0 ? totPOI / totCOI : 0;
-  const imb  = (totCOI + totPOI) > 0 ? Math.abs(totPOI - totCOI) / (totPOI + totCOI) * 100 : 0;
-
-  // Visible-rows totals for the footer
-  let visCOI = 0, visPOI = 0, visCCOI = 0, visPCOI = 0;
-  vis.forEach(r => {
-    visCOI  += r.CE?.openInterest || 0;
-    visPOI  += r.PE?.openInterest || 0;
-    visCCOI += r.CE?.changeinOpenInterest || 0;
-    visPCOI += r.PE?.changeinOpenInterest || 0;
-  });
+  const imb  = (totCOI + totPOI) > 0 ? ((totPOI - totCOI) / (totPOI + totCOI) * 100) : 0;
   const mp   = computeMaxPain(useRows);
 
   // Update section title
@@ -443,29 +437,30 @@ function renderTable(sym, data) {
   });
   $(`${p}-chain-body`).innerHTML = html;
 
-  // Footer totals (visible rows only)
+  // Footer totals
   const setFoot = (id, val, color) => {
     const el = $(id); if (!el) return;
-    el.textContent = fmtNum(val); el.style.color = color;
+    el.textContent = fmtFull(val); el.style.color = color;
   };
-  setFoot(`${p}-foot-call-coi`, visCCOI, visCCOI >= 0 ? 'var(--call)' : 'var(--red)');
-  setFoot(`${p}-foot-call-oi`,  visCOI,  'var(--call)');
-  setFoot(`${p}-foot-put-oi`,   visPOI,  'var(--put)');
-  setFoot(`${p}-foot-put-coi`,  visPCOI, visPCOI >= 0 ? 'var(--put)' : 'var(--red)');
+  setFoot(`${p}-foot-call-coi`, totCCOI, totCCOI >= 0 ? 'var(--call)' : 'var(--red)');
+  setFoot(`${p}-foot-call-oi`,  totCOI,  'var(--call)');
+  setFoot(`${p}-foot-put-oi`,   totPOI,  'var(--put)');
+  setFoot(`${p}-foot-put-coi`,  totPCOI, totPCOI >= 0 ? 'var(--put)' : 'var(--red)');
 
   // Stat bar
   const setS = (id, val, color) => {
     const el = $(id); if (!el) return;
     el.textContent = val; if (color) el.style.color = color;
   };
-  setS(`${p}-sb-coi`,  fmtNum(totCOI));
-  setS(`${p}-sb-poi`,  fmtNum(totPOI));
+  setS(`${p}-sb-coi`,  fmtFull(totCOI));
+  setS(`${p}-sb-poi`,  fmtFull(totPOI));
   const pcrSbEl = $(`${p}-sb-pcr`);
   const sbPhase = getPcrPhase(pcr);
   if (pcrSbEl) { pcrSbEl.textContent = fmtPCR(pcr); pcrSbEl.className = `sb-val ${sbPhase.cls}`; }
-  setS(`${p}-sb-ccoi`, fmtNum(totCCOI), totCCOI >= 0 ? 'var(--green)' : 'var(--red)');
-  setS(`${p}-sb-pcoi`, fmtNum(totPCCOI), totPCCOI >= 0 ? 'var(--green)' : 'var(--red)');
-  setS(`${p}-sb-imb`,  imb.toFixed(2) + '%');
+  setS(`${p}-sb-ccoi`, fmtFull(totCCOI), totCCOI >= 0 ? 'var(--green)' : 'var(--red)');
+  setS(`${p}-sb-pcoi`, fmtFull(totPCOI), totPCOI >= 0 ? 'var(--green)' : 'var(--red)');
+  const imbSign = imb >= 0 ? '+' : '';
+  setS(`${p}-sb-imb`,  imbSign + imb.toFixed(2) + '%', imb > 0 ? 'var(--green)' : imb < 0 ? 'var(--red)' : '');
   const sentEl = $(`${p}-sb-sent`);
   if (sentEl) { sentEl.textContent = `${sbPhase.icon} ${sbPhase.label}`; sentEl.className = `sb-val ${sbPhase.cls}`; }
   setS(`${p}-sb-mp`,   mp ? mp.toLocaleString('en-IN') : '—');
