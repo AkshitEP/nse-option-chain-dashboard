@@ -199,26 +199,11 @@ SYMBOLS.forEach(sym => {
 
 // ── Header panel updater ─────────────────────────────────────────────
 function updateSymbolPanel(symbol, data) {
-  const records = data?.records || {};
-  const rows    = records.data || data?.filtered?.data || [];
-  if (!rows.length) return;
-
-  const spot   = records.underlyingValue || rows.find(r => r.CE?.underlyingValue)?.CE?.underlyingValue || 0;
-  // Use the user-selected expiry, falling back to the first available
-  const expiry = symState[symbol].expiry || (records.expiryDates || [])[0] || '—';
-  const atm    = findATM(rows, spot);
-
-  // Filter rows to match the selected expiry (consistent with renderTable)
-  const fRows   = rows.filter(r => {
-    const d = r.expiryDates || r.CE?.expiryDate || r.PE?.expiryDate || '';
-    return !expiry || d === expiry || d.includes(expiry);
-  });
-  const useRows = fRows.length ? fRows : rows;
-  let totCOI = 0, totPOI = 0;
-  useRows.forEach(r => { totCOI += r.CE?.openInterest || 0; totPOI += r.PE?.openInterest || 0; });
-  const pcr    = totCOI > 0 ? totPOI / totCOI : 0;
-  const imb    = (totCOI + totPOI) > 0 ? ((totPOI - totCOI) / (totPOI + totCOI) * 100) : 0;
-  const imbStr = (imb >= 0 ? '+' : '') + imb.toFixed(2) + '%';
+  // Header panel is updated AFTER renderTable via processData,
+  // so we just read the latest computed values from symState
+  const ss = symState[symbol];
+  if (!ss._computed) return;  // not yet computed
+  const { pcr, imb, spot, expiry } = ss._computed;
   const phase  = getPcrPhase(pcr);
 
   const pr = prefix(symbol);
@@ -229,10 +214,11 @@ function updateSymbolPanel(symbol, data) {
   };
 
   setEl(`${pr}-spot`,   fmtSpt(spot));
-  setEl(`${pr}-atm`,    atm ? atm.toLocaleString('en-IN') : '—');
-  // PCR with phase colour + label
+  setEl(`${pr}-atm`,    ss.atm ? ss.atm.toLocaleString('en-IN') : '—');
+  // PCR (OI Change) with phase colour + label
   const pcrEl = $(`${pr}-pcr`);
   if (pcrEl) { pcrEl.textContent = `${fmtPCR(pcr)} ${phase.label}`; pcrEl.className = `ms-value ${phase.cls}`; }
+  const imbStr = (imb >= 0 ? '+' : '') + imb.toFixed(2) + '%';
   setEl(`${pr}-imb`,    imbStr, imb > 0 ? 'var(--green)' : 'var(--red)');
   setEl(`${pr}-expiry`, expiry);
 
@@ -330,8 +316,9 @@ function processData(sym, data) {
   $(`${p}-last-update`).textContent = new Date().toLocaleTimeString('en-IN',
     { hour12: true, hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-  updateSymbolPanel(sym, data);
   renderTable(sym, data);
+  // Update header after renderTable has set _computed
+  updateSymbolPanel(sym, data);
 }
 
 // ── Render table ────────────────────────────────────────────────────
@@ -354,14 +341,13 @@ function renderTable(sym, data) {
   const hi      = Math.min(useRows.length - 1, atmIdx + symN);
   const vis     = useRows.slice(lo, hi + 1);
 
-
   // Heat map maxima
   const maxCallOI  = Math.max(...vis.map(r => r.CE?.openInterest || 0));
   const maxPutOI   = Math.max(...vis.map(r => r.PE?.openInterest || 0));
   const maxCallCOI = Math.max(...vis.map(r => Math.abs(r.CE?.changeinOpenInterest || 0)));
   const maxPutCOI  = Math.max(...vis.map(r => Math.abs(r.PE?.changeinOpenInterest || 0)));
 
-  // ── All-expiry totals (for stat bar — stable regardless of centre strike) ──
+  // ── All-expiry totals (for reference) ──
   let allCOI = 0, allPOI = 0, allCCOI = 0, allPCOI = 0;
   useRows.forEach(r => {
     allCOI  += r.CE?.openInterest || 0;
@@ -369,11 +355,8 @@ function renderTable(sym, data) {
     allCCOI += r.CE?.changeinOpenInterest || 0;
     allPCOI += r.PE?.changeinOpenInterest || 0;
   });
-  const pcr  = allCOI > 0 ? allPOI / allCOI : 0;
-  const imb  = (allCOI + allPOI) > 0 ? ((allPOI - allCOI) / (allPOI + allCOI) * 100) : 0;
-  const mp   = computeMaxPain(useRows);
 
-  // ── Visible-row totals (for table footer — sums what's displayed) ──
+  // ── Visible-row totals (for table footer + stat bar + PCR) ──
   let visCOI = 0, visPOI = 0, visCCOI = 0, visPCOI = 0;
   vis.forEach(r => {
     visCOI  += r.CE?.openInterest || 0;
@@ -381,6 +364,18 @@ function renderTable(sym, data) {
     visCCOI += r.CE?.changeinOpenInterest || 0;
     visPCOI += r.PE?.changeinOpenInterest || 0;
   });
+
+  // PCR = Put OI Change / Call OI Change (from visible rows)
+  const pcr  = visCCOI !== 0 ? Math.abs(visPCOI / visCCOI) : 0;
+  const imb  = (visCCOI + visPCOI) !== 0 ? ((visPCOI - visCCOI) / (Math.abs(visPCOI) + Math.abs(visCCOI)) * 100) : 0;
+  const mp   = computeMaxPain(useRows);
+
+  // Store computed values so header panel can read them
+  symState[sym]._computed = {
+    pcr, imb,
+    spot: records.underlyingValue || 0,
+    expiry: symState[sym].expiry || (records.expiryDates || [])[0] || '—',
+  };
 
   // Update section title
   $(`${p}-table-title`).textContent =
@@ -409,7 +404,7 @@ function renderTable(sym, data) {
     const cVWAP = updateVwap(`${sym}-${sp}-CE`, cLTP, cVol);
     const pVWAP = updateVwap(`${sym}-${sp}-PE`, pLTP, pVol);
 
-    const pcrStrike = cOI > 0 ? pOI / cOI : null;
+    const pcrStrike = cCOI !== 0 ? Math.abs(pCOI / cCOI) : null;
     const pcrClass  = pcrStrike == null ? 'num-neu'
                     : pcrStrike > 1.2   ? 'num-pos'
                     : pcrStrike < 0.8   ? 'num-neg' : 'num-neu';
@@ -446,7 +441,7 @@ function renderTable(sym, data) {
   });
   $(`${p}-chain-body`).innerHTML = html;
 
-  // Footer totals (visible rows — matches what's displayed in the table)
+  // Footer totals (visible rows)
   const setFoot = (id, val, color) => {
     const el = $(id); if (!el) return;
     el.textContent = fmtFull(val); el.style.color = color;
@@ -456,18 +451,18 @@ function renderTable(sym, data) {
   setFoot(`${p}-foot-put-oi`,   visPOI,  'var(--put)');
   setFoot(`${p}-foot-put-coi`,  visPCOI, visPCOI >= 0 ? 'var(--put)' : 'var(--red)');
 
-  // Stat bar (all strikes for the expiry — stable regardless of centre strike/N)
+  // Stat bar (visible rows — PCR is OI Change based)
   const setS = (id, val, color) => {
     const el = $(id); if (!el) return;
     el.textContent = val; if (color) el.style.color = color;
   };
-  setS(`${p}-sb-coi`,  fmtFull(allCOI));
-  setS(`${p}-sb-poi`,  fmtFull(allPOI));
+  setS(`${p}-sb-coi`,  fmtFull(visCOI));
+  setS(`${p}-sb-poi`,  fmtFull(visPOI));
   const pcrSbEl = $(`${p}-sb-pcr`);
   const sbPhase = getPcrPhase(pcr);
   if (pcrSbEl) { pcrSbEl.textContent = fmtPCR(pcr); pcrSbEl.className = `sb-val ${sbPhase.cls}`; }
-  setS(`${p}-sb-ccoi`, fmtFull(allCCOI), allCCOI >= 0 ? 'var(--green)' : 'var(--red)');
-  setS(`${p}-sb-pcoi`, fmtFull(allPCOI), allPCOI >= 0 ? 'var(--green)' : 'var(--red)');
+  setS(`${p}-sb-ccoi`, fmtFull(visCCOI), visCCOI >= 0 ? 'var(--green)' : 'var(--red)');
+  setS(`${p}-sb-pcoi`, fmtFull(visPCOI), visPCOI >= 0 ? 'var(--green)' : 'var(--red)');
   const imbSign = imb >= 0 ? '+' : '';
   setS(`${p}-sb-imb`,  imbSign + imb.toFixed(2) + '%', imb > 0 ? 'var(--green)' : imb < 0 ? 'var(--red)' : '');
   const sentEl = $(`${p}-sb-sent`);
