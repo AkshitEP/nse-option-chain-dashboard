@@ -361,17 +361,26 @@ function renderTable(sym, data) {
   const maxCallCOI = Math.max(...vis.map(r => Math.abs(r.CE?.changeinOpenInterest || 0)));
   const maxPutCOI  = Math.max(...vis.map(r => Math.abs(r.PE?.changeinOpenInterest || 0)));
 
-  // Totals — from visible rows (matching what user sees in the table)
-  let totCOI = 0, totPOI = 0, totCCOI = 0, totPCOI = 0;
-  vis.forEach(r => {
-    totCOI  += r.CE?.openInterest || 0;
-    totPOI  += r.PE?.openInterest || 0;
-    totCCOI += r.CE?.changeinOpenInterest || 0;
-    totPCOI += r.PE?.changeinOpenInterest || 0;
+  // ── All-expiry totals (for stat bar — stable regardless of centre strike) ──
+  let allCOI = 0, allPOI = 0, allCCOI = 0, allPCOI = 0;
+  useRows.forEach(r => {
+    allCOI  += r.CE?.openInterest || 0;
+    allPOI  += r.PE?.openInterest || 0;
+    allCCOI += r.CE?.changeinOpenInterest || 0;
+    allPCOI += r.PE?.changeinOpenInterest || 0;
   });
-  const pcr  = totCOI > 0 ? totPOI / totCOI : 0;
-  const imb  = (totCOI + totPOI) > 0 ? ((totPOI - totCOI) / (totPOI + totCOI) * 100) : 0;
+  const pcr  = allCOI > 0 ? allPOI / allCOI : 0;
+  const imb  = (allCOI + allPOI) > 0 ? ((allPOI - allCOI) / (allPOI + allCOI) * 100) : 0;
   const mp   = computeMaxPain(useRows);
+
+  // ── Visible-row totals (for table footer — sums what's displayed) ──
+  let visCOI = 0, visPOI = 0, visCCOI = 0, visPCOI = 0;
+  vis.forEach(r => {
+    visCOI  += r.CE?.openInterest || 0;
+    visPOI  += r.PE?.openInterest || 0;
+    visCCOI += r.CE?.changeinOpenInterest || 0;
+    visPCOI += r.PE?.changeinOpenInterest || 0;
+  });
 
   // Update section title
   $(`${p}-table-title`).textContent =
@@ -437,28 +446,28 @@ function renderTable(sym, data) {
   });
   $(`${p}-chain-body`).innerHTML = html;
 
-  // Footer totals
+  // Footer totals (visible rows — matches what's displayed in the table)
   const setFoot = (id, val, color) => {
     const el = $(id); if (!el) return;
     el.textContent = fmtFull(val); el.style.color = color;
   };
-  setFoot(`${p}-foot-call-coi`, totCCOI, totCCOI >= 0 ? 'var(--call)' : 'var(--red)');
-  setFoot(`${p}-foot-call-oi`,  totCOI,  'var(--call)');
-  setFoot(`${p}-foot-put-oi`,   totPOI,  'var(--put)');
-  setFoot(`${p}-foot-put-coi`,  totPCOI, totPCOI >= 0 ? 'var(--put)' : 'var(--red)');
+  setFoot(`${p}-foot-call-coi`, visCCOI, visCCOI >= 0 ? 'var(--call)' : 'var(--red)');
+  setFoot(`${p}-foot-call-oi`,  visCOI,  'var(--call)');
+  setFoot(`${p}-foot-put-oi`,   visPOI,  'var(--put)');
+  setFoot(`${p}-foot-put-coi`,  visPCOI, visPCOI >= 0 ? 'var(--put)' : 'var(--red)');
 
-  // Stat bar
+  // Stat bar (all strikes for the expiry — stable regardless of centre strike/N)
   const setS = (id, val, color) => {
     const el = $(id); if (!el) return;
     el.textContent = val; if (color) el.style.color = color;
   };
-  setS(`${p}-sb-coi`,  fmtFull(totCOI));
-  setS(`${p}-sb-poi`,  fmtFull(totPOI));
+  setS(`${p}-sb-coi`,  fmtFull(allCOI));
+  setS(`${p}-sb-poi`,  fmtFull(allPOI));
   const pcrSbEl = $(`${p}-sb-pcr`);
   const sbPhase = getPcrPhase(pcr);
   if (pcrSbEl) { pcrSbEl.textContent = fmtPCR(pcr); pcrSbEl.className = `sb-val ${sbPhase.cls}`; }
-  setS(`${p}-sb-ccoi`, fmtFull(totCCOI), totCCOI >= 0 ? 'var(--green)' : 'var(--red)');
-  setS(`${p}-sb-pcoi`, fmtFull(totPCOI), totPCOI >= 0 ? 'var(--green)' : 'var(--red)');
+  setS(`${p}-sb-ccoi`, fmtFull(allCCOI), allCCOI >= 0 ? 'var(--green)' : 'var(--red)');
+  setS(`${p}-sb-pcoi`, fmtFull(allPCOI), allPCOI >= 0 ? 'var(--green)' : 'var(--red)');
   const imbSign = imb >= 0 ? '+' : '';
   setS(`${p}-sb-imb`,  imbSign + imb.toFixed(2) + '%', imb > 0 ? 'var(--green)' : imb < 0 ? 'var(--red)' : '');
   const sentEl = $(`${p}-sb-sent`);
